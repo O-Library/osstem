@@ -1507,7 +1507,8 @@ function migrateFromOldSheet_(overwrite) {
     var lh = headerIdx_(lv, '성명');
     var lg = function (r, k) { return lh.map[k] === undefined ? '' : r[lh.map[k]]; };
     var t = today_();
-    var byNo = {}; rows_('loans').forEach(function (l) { if (l.no) byNo[l.no] = l; });
+    // 원본 시트에는 같은 번호가 서로 다른 대출에 쓰인 경우가 있어 번호+도서코드로 찾는다
+    var byNo = {}; rows_('loans').forEach(function (l) { if (l.no) byNo[l.no + '|' + l.bookCode] = l; });
     var bookMap = {}; rows_('books').forEach(function (b) { bookMap[b.code] = b; });
     var lout = [], lostBooks = [];
     lv.slice(lh.row + 1).forEach(function (r) {
@@ -1523,7 +1524,7 @@ function migrateFromOldSheet_(overwrite) {
       else status = 'active';
       var loanDate = normDate_(lg(r, '대출일'));
       var b = bookMap[code];
-      var l = no && byNo[no];
+      var l = no && byNo[no + '|' + code];
       if (l && !overwrite && l.status !== 'active') return;
       if (l && !overwrite && status === 'active') return;
       l = l || { id: uid_(), no: no, empNo: '', email: '', extensions: [], extensionRequest: null, createdBy: 'sheet' };
