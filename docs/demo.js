@@ -70,7 +70,7 @@ window.__LOANS = {"header": ["번호", "도서코드", "책키", "도서명", "�
   };
   window.google = { script: { run: new Runner() } };
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
-  var KEY = 'osstem-demo-v2';
+  var KEY = 'osstem-demo-v4';
   window.__demoSave = function () {
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };
@@ -1757,7 +1757,7 @@ function tally_(roundId) {
 function voterCount_(roundId) { return rows_('ballots').filter(function (b) { return b.roundId === roundId && (b.choices || []).length; }).length; }
 
 function requestView_(r, admin) {
-  var v = { id: r.id, createdAt: String(r.createdAt).slice(0, 10), title: r.title, author: r.author, publisher: r.publisher, reason: r.reason,
+  var v = { id: r.id, createdAt: String(r.createdAt), title: r.title, author: r.author, publisher: r.publisher, reason: r.reason,
     status: r.status, roundId: r.roundId, votes: r.votes || 0, adminMemo: r.adminMemo, bookCode: r.bookCode };
   if (admin) { var e = r.empNo && empMap_()[normEmp_(r.empNo)]; v.empNo = r.empNo; v.requester = e ? String(e.name).trim() + ' (' + String(e.team).trim() + ')' : r.empNo; }
   return v;
@@ -1844,13 +1844,13 @@ function updateRequest_(id, patch) {
 }
 function createRound_(input, admin) {
   var ids = [].concat(input.candidates || []);
-  if (ids.length < 2) throw new AppError('후보 도서를 2권 이상 골라 주세요.');
+  if (ids.length < 1) throw new AppError('투표 후보 도서를 1권 이상 골라 주세요.');
   if (currentRound_()) throw new AppError('이미 진행 중인 투표가 있습니다. 마감한 뒤 새 투표를 만들어 주세요.');
   var reqs = rows_('requests').filter(function (r) { return ids.indexOf(r.id) >= 0; });
   var start = input.startDate || today_(), end = input.endDate || addDays_(start, 7);
   if (end < start) throw new AppError('마감일이 시작일보다 빠릅니다.');
   var r = { id: uid_(), title: String(input.title || '').trim() || (start.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표'), startDate: start, endDate: end,
-    maxVotes: Math.max(1, Math.min(10, Number(input.maxVotes) || 3)), buyCount: Math.max(1, Number(input.buyCount) || 5), candidates: reqs.map(function (x) { return x.id; }),
+    maxVotes: Math.max(1, Math.min(10, Number(input.maxVotes) || 3)), buyCount: Math.max(1, Number(input.buyCount) || 5), candidates: ids.filter(function (id) { return reqs.some(function (x) { return x.id === id; }); }),
     status: '진행', createdAt: nowIso_(), createdBy: admin || '', result: null };
   save_('rounds', r);
   reqs.forEach(function (x) { x.status = '투표중'; x.roundId = r.id; x.votes = 0; });
@@ -2107,7 +2107,7 @@ function rpc(name, args, token) {
 }
 
 // 데모 데이터: 오스템문고 실제 장서·대출 현황(구글 시트 기준). 다른 이용자 이름은 가명, 본인(29011301 장유영)만 실명.
-// 희망도서·투표·검색 기록은 기능을 보여주기 위한 예시입니다.
+// 희망도서는 실제 신청 1건(모두의 구글 애널리틱스 4). 예시 데이터는 넣지 않습니다.
 (function () {
   INITIAL_ADMIN_PASSWORD = 'demo1234';
   OLD_SHEET_ID = 'DEMO_OLD';
@@ -2134,50 +2134,17 @@ function rpc(name, args, token) {
     row[lh.indexOf('등록경로')] = 'sheet';
     return row;
   }));
-  var PEOPLE = [['29011301', '장유영', '인재개발팀'], ['D1001', '김하늘', '국내영업1팀'], ['D1002', '이도윤', '해외영업팀'], ['D1003', '박서연', '고객서비스팀'], ['D1004', '최민준', '마케팅기획팀'], ['D1005', '정유나', '연구개발1팀'],
-    ['D1007', '오세린', '구매팀'], ['D1009', '서다은', '인재개발팀'], ['D1011', '강보라', '경영기획팀']];
+  var PEOPLE = [['29011301', '장유영', '인재개발팀']];
   db.getSheetByName('사원명부').data = [['사번', '성명', '소속', '이메일']].concat(PEOPLE.map(function (p) { return [p[0], p[1], p[2], 'demo-' + p[0].toLowerCase() + '@example.com']; }));
   _tables = {}; _cats = null; _empMap = null;
   // 기존 시트에서 반납 처리가 빠진 기록은 [데이터 점검]과 같은 방식으로 정리
   var stale = dataCheck_().stale.map(function (l) { return l.id; });
   _tables = {}; fixStale_(stale, '데이터 점검'); _tables = {};
   var today = today_();
-  // 희망도서 · 진행 중 투표 (예시)
-  var R = [['양자컴퓨터 쉽게 이해하기', '김양자', 'D1005', 'R&D 신기술 스터디용'], ['ESG 경영 실무', '박지속', 'D1011', 'ESG 보고서 준비에 필요해요'], ['비즈니스 중국어 회화', '왕이', 'D1002', '중국 법인 출장 대비'],
-    ['처음 팀장이 된 당신에게', '이리더', 'D1009', '신임 팀장 교육 교재로'], ['유튜브 마케팅 실전', '최콘텐', 'D1004', '제품 홍보 채널 운영'], ['클레임 응대의 기술', '정상담', 'D1003', '고객 불만 응대 사례 공부']];
-  save_('requests', R.map(function (r, i) { return { id: 'req' + i, createdAt: today + 'T09:0' + i + ':00', title: r[0], author: r[1], publisher: '', reason: r[3], empNo: r[2], status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' }; }));
+  // 희망도서: 실제로 들어온 신청 1건 → 구매 투표 진행
+  save_('requests', [{ id: 'req-ga4', createdAt: nowIso_(), title: '모두의 구글 애널리틱스 4', author: '김도연', publisher: '길벗', reason: '', empNo: '29011301', status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' }]);
   _tables = {};
-  createRound_({ title: today.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표', candidates: ['req0', 'req1', 'req2', 'req3', 'req4'], endDate: addDays_(today, 6), maxVotes: 3, buyCount: 3 }, '데모');
-  _tables = {};
-  var rid = rows_('rounds')[0].id;
-  [['D1001', ['req3', 'req1']], ['D1003', ['req3']], ['D1004', ['req4', 'req3']], ['D1005', ['req0', 'req1']], ['D1007', ['req1']], ['D1009', ['req3', 'req0', 'req1']], ['D1011', ['req1', 'req4']]]
-    .forEach(function (v) { _tables = {}; vote_(rid, v[1], v[0]); });
-  _tables = {};
-  [['recommend', 'rnd', '', '양자컴퓨터 반도체', 0], ['search', '', '', '양자컴퓨터', 0], ['recommend', 'rnd', 'ai', '양자컴퓨터', 1], ['search', '', '', 'ESG', 0], ['recommend', 'support', '', 'ESG 지속가능', 1], ['search', '', '', 'ESG 보고서', 0],
-    ['search', '', '', '중국어', 1], ['recommend', 'gsales', '', '중국어 회화', 1], ['search', '', '', '중국어', 1], ['recommend', 'cs', 'people', '클레임 응대', 2], ['search', '', '', '클레임', 0], ['recommend', 'cs', '', '클레임', 2],
-    ['recommend', 'support', 'leader', '', 14], ['recommend', 'dsales', 'speak', '협상', 9], ['recommend', 'mkt', 'trend', '유튜브', 2], ['search', '', '', '유튜브', 0], ['recommend', 'prod', 'think', '', 11], ['recommend', 'scm', 'data', '엑셀', 7],
-    ['recommend', 'support', 'ai', '', 16], ['recommend', 'support', 'report', '', 10], ['recommend', 'dsales', 'leader', '', 14], ['search', '', '', '메타버스', 1], ['search', '', '', '메타버스', 1]]
-    .forEach(function (x) { logSearch_({ source: x[0], job: x[1], situations: x[2] ? [x[2]] : [], terms: x[3] ? x[3].split(' ') : [], hits: x[4] }); });
+  createRound_({ title: today.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표', candidates: ['req-ga4'], endDate: addDays_(today, 7), maxVotes: 3, buyCount: 1 }, '장유영');
   _tables = {}; _cats = null; _empMap = null;
   window.__demoSave();
-})();
-
-// 데모 안내 띠 + 화면 전환 + 초기화
-(function () {
-  var admin = window.APP_MODE === 'admin';
-  var css = document.createElement('style');
-  css.textContent = '.mockbar{background:#2b2118;color:#fff3ea;font-size:13px}.mockbar-in{max-width:1240px;margin:0 auto;padding:8px 20px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.mockbar b{color:#ffb08a;letter-spacing:.04em}.mockbar .sw{margin-left:auto;display:inline-flex;gap:2px;background:rgba(255,255,255,.1);border-radius:8px;padding:2px}.mockbar .sw button{border:0;background:none;color:#fff3ea;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:13px}.mockbar .sw button.on{background:#d9480f;color:#fff;font-weight:700}@media (max-width:600px){.mockbar-in{padding:8px 16px}.mockbar .sw{margin-left:0}}';
-  document.head.appendChild(css);
-  var bar = document.createElement('div');
-  bar.className = 'mockbar';
-  bar.innerHTML = '<div class="mockbar-in"><b>DEMO</b><span>' + (admin ? '관리자 비밀번호 demo1234 · 실제 장서·대출 현황(10/27 기준), 다른 이용자 이름은 가명' : '내 사번 29011301 · 실제 장서·대출 현황(10/27 기준), 다른 이용자 이름은 가명') + '</span>'
-    + '<div class="sw"><button type="button" data-go="user" class="' + (admin ? '' : 'on') + '">사용자 페이지</button><button type="button" data-go="admin" class="' + (admin ? 'on' : '') + '">관리자 페이지</button><button type="button" data-go="reset" title="데모 데이터를 처음 상태로">초기화</button></div></div>';
-  document.body.insertBefore(bar, document.body.firstChild);
-  bar.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-go]'); if (!b) return;
-    var go = b.getAttribute('data-go');
-    if (go === 'reset') return window.__demoReset();
-    if (window.__SINGLE_PAGE) { location.hash = go === 'admin' ? '#admin' : '#user'; location.reload(); }
-    else location.href = go === 'admin' ? 'admin.html' : './';
-  });
 })();

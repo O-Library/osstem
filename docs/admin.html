@@ -339,6 +339,17 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   .hbar { grid-template-columns: 110px 1fr 32px; }
 }
 
+/* ── 접속 팝업 ── */
+.promo-modal { max-width: 560px; }
+.promo-modal .mbody { padding: 26px 26px 18px; }
+.promo h2 { font-family: var(--display); font-size: 22px; line-height: 1.35; text-wrap: balance; margin: 4px 0 0; }
+.promo-eyebrow { font-size: 12px; font-weight: 800; color: var(--primary); letter-spacing: .03em; }
+.promo-new { display: grid; gap: 4px; background: var(--primary-soft); border: 1px solid #ffd2b8; border-radius: var(--radius-s); padding: 12px 14px; margin-bottom: 12px; }
+.promo-new .pill { justify-self: start; }
+.promo-new b { font-size: 16px; }
+.promo .cands { max-height: 38vh; overflow: auto; }
+.promo-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+
   </style>
 </head>
 <body>
@@ -414,8 +425,10 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   const teamCell = (l) => esc(l.team || '') + (l.teamAtLoan ? ` <span title="대출 당시 소속">(당시 ${esc(l.teamAtLoan)})</span>` : '');
   const short = (d) => (d ? String(d).slice(0, 10).replace(/-/g, '.') : '');
 
-  function modal(html, cls = '') {
-    closeModal();
+  let modalOnClose = null;
+  function modal(html, cls = '', onClose) {
+    closeModal(true);
+    modalOnClose = onClose || null;
     const s = document.createElement('div'); s.className = 'scrim';
     s.innerHTML = `<div class="modal ${cls}" role="dialog" aria-modal="true"><button class="x" aria-label="닫기">×</button><div class="mbody">${html}</div></div>`;
     s.addEventListener('mousedown', (e) => { if (e.target === s) closeModal(); });
@@ -423,7 +436,11 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     document.body.appendChild(s); document.body.style.overflow = 'hidden';
     return $('.mbody', s);
   }
-  function closeModal() { $$('.scrim').forEach((s) => s.remove()); document.body.style.overflow = ''; }
+  function closeModal(silent) {
+    $$('.scrim').forEach((s) => s.remove()); document.body.style.overflow = '';
+    const f = modalOnClose; modalOnClose = null;
+    if (f && silent !== true) f();
+  }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
   // ─── 표지 ─────────────────────────────────────────
@@ -672,6 +689,72 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       <div class="panel"><h2>문의</h2><p style="margin:0">${esc(c.managerName)}<br>${esc(c.managerPhone)}${c.managerEmail ? `<br><a href="mailto:${esc(c.managerEmail)}">${esc(c.managerEmail)}</a>` : ''}</p></div></div>`;
   }
 
+  // ─── 접속 팝업: 구매 투표 → 책 추천 (홍보용) ─────
+  const PROMO_KEY = 'osstem-promo-hide';
+  const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const promoHidden = () => { try { return localStorage.getItem(PROMO_KEY) === localToday(); } catch (e) { return false; } };
+  const hideToday = (on) => { try { if (on) localStorage.setItem(PROMO_KEY, localToday()); else localStorage.removeItem(PROMO_KEY); } catch (e) {} };
+  const promoFoot = (next) => `<div class="promo-foot"><label class="chk small"><input type="checkbox" class="hideToday"> 오늘 하루 보지 않기</label><button type="button" class="btn sm promo-later">${next ? '다음' : '닫기'}</button></div>`;
+  function bindPromoFoot(m) {
+    $('.hideToday', m).onchange = (e) => hideToday(e.target.checked);
+    $('.promo-later', m).onclick = () => closeModal();
+  }
+  async function showPromos() {
+    if (MODE === 'admin' || promoHidden()) return;
+    let d = null; try { d = await api('wishBoard'); } catch (e) {}
+    const next = () => { if (!promoHidden()) recPromo(); };
+    if (d && d.round && d.round.candidates.length) votePromo(d.round, next); else next();
+  }
+  function votePromo(r, next) {
+    const newest = r.candidates.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    const max = Math.max(1, ...r.candidates.map((c) => c.count));
+    const m = modal(`<div class="promo">
+      <div class="promo-eyebrow">희망도서 구매 투표 진행 중 · ${r.daysLeft === 0 ? '오늘 마감' : 'D-' + r.daysLeft}</div>
+      <h2>${esc(r.title)}</h2>
+      <p class="small muted" style="margin:4px 0 14px">${r.candidates.length === 1 ? '임직원이 신청한 책이에요. 읽고 싶다면 투표해 주세요. 투표 결과를 보고 구매합니다.' : `임직원이 신청한 책 중 많이 고른 ${r.buyCount}권을 구매합니다. 1인 최대 ${r.maxVotes}권`} · ${r.voters}명 참여 · 마감 ${short(r.endDate)}</p>
+      ${r.candidates.length === 1 ? '' : `<div class="promo-new"><span class="pill warn">NEW 최근 신청</span><b>${esc(newest.title)}</b><span class="small muted">${esc([newest.author, newest.publisher].filter(Boolean).join(' · '))}</span>${newest.reason ? `<span class="small">“${esc(newest.reason)}”</span>` : ''}</div>`}
+      <div class="cands">${r.candidates.map((c) => `<label class="cand2"><input type="checkbox" value="${esc(c.id)}" ${c.id === newest.id ? 'data-new="1"' : ''}><div><b>${esc(c.title)}</b>${c.id === newest.id ? ' <span class="pill warn" style="margin-left:4px">NEW</span>' : ''}<div class="small muted">${esc([c.author, c.publisher].filter(Boolean).join(' · '))}</div></div><div class="cnt"><span>${c.count}표</span><div class="bar"><i style="width:${Math.round(c.count / max * 100)}%"></i></div></div></label>`).join('')}</div>
+      <div id="pvEmp" style="margin-top:12px"></div>
+      <button class="btn primary lg" id="pvGo" style="width:100%;margin-top:12px" disabled>사번 확인 후 투표하기</button>
+      ${promoFoot(true)}</div>`, 'promo-modal', next);
+    let voter = null;
+    const ef = empField('pEmp', async (w) => {
+      voter = w; const go = $('#pvGo', m); go.disabled = !w; go.textContent = w ? '투표하기' : '사번 확인 후 투표하기';
+      if (w) { try { const b = await api('myBallot', r.id, w.empNo); if ((b.myChoices || []).length) $$('.cands input', m).forEach((c) => { c.checked = b.myChoices.includes(c.value); }); } catch (e) {} }
+    });
+    $('#pvEmp', m).innerHTML = ef.html; ef.bind($('#pvEmp', m));
+    $$('.cands input', m).forEach((c) => c.onchange = () => { if ($$('.cands input', m).filter((x) => x.checked).length > r.maxVotes) { c.checked = false; toast(`최대 ${r.maxVotes}권까지 고를 수 있어요.`, true); } });
+    $('#pvGo', m).onclick = async () => {
+      const ids = $$('.cands input', m).filter((x) => x.checked).map((x) => x.value);
+      if (!ids.length) return toast('투표할 책을 골라 주세요.', true);
+      try { await api('vote', r.id, ids, voter.empNo); toast('투표했어요. 마감 전까지 [희망도서]에서 바꿀 수 있어요.'); closeModal(); } catch (e) { toast(e.message, true); }
+    };
+    bindPromoFoot(m);
+  }
+  async function recPromo() {
+    let o; try { o = state.recOpt || (state.recOpt = await api('recommendOptions')); } catch (e) { return; }
+    const pick = { job: '', situations: [] };
+    const top = ['leader', 'report', 'speak', 'ai', 'data', 'rest'];
+    const m = modal(`<div class="promo">
+      <div class="promo-eyebrow">NEW · 개인정보 입력 없이</div>
+      <h2>지금 나에게 필요한 책, 추천받아 보세요</h2>
+      <p class="small muted" style="margin:4px 0 14px">직무와 고민만 고르면 오스템문고 보유 도서 중 3권을 추천 이유와 함께 알려드려요. 대출 중이면 바로 빌릴 수 있는 책도 함께요.</p>
+      <div class="small" style="font-weight:700;margin-bottom:6px">내 업무 그룹</div>
+      <div class="chips">${o.jobs.map((j) => `<button type="button" class="chip" data-pj="${j.id}">${esc(j.name)}</button>`).join('')}</div>
+      <div class="small" style="font-weight:700;margin:14px 0 6px">요즘 고민</div>
+      <div class="chips">${o.situations.filter((x) => top.includes(x.id)).map((x) => `<button type="button" class="chip" data-ps="${x.id}">${esc(x.label)}</button>`).join('')}</div>
+      <button class="btn primary lg" id="prGo" style="width:100%;margin-top:16px">책 3권 추천받기</button>
+      ${promoFoot(false)}</div>`, 'promo-modal');
+    $$('[data-pj]', m).forEach((b) => b.onclick = () => { pick.job = pick.job === b.dataset.pj ? '' : b.dataset.pj; $$('[data-pj]', m).forEach((x) => x.classList.toggle('on', x.dataset.pj === pick.job)); });
+    $$('[data-ps]', m).forEach((b) => b.onclick = () => { const id = b.dataset.ps; pick.situations = pick.situations.includes(id) ? pick.situations.filter((x) => x !== id) : pick.situations.concat(id); b.classList.toggle('on'); });
+    $('#prGo', m).onclick = () => {
+      state.rec = { job: pick.job, situations: pick.situations, situation: '', keywords: '' };
+      state.recAuto = !!(pick.job || pick.situations.length);
+      closeModal(true); location.hash = '#/recommend';
+    };
+    bindPromoFoot(m);
+  }
+
   // ─── 책 추천 (개인정보 없이: 직무 그룹·고민·키워드만) ───
   async function renderRecommend() {
     if (!state.recOpt) state.recOpt = await api('recommendOptions');
@@ -702,6 +785,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       catch (e) { out.innerHTML = `<div class="rec-empty"><span>${esc(e.message)}</span></div>`; }
     };
     $('#recGo').onclick = go;
+    if (state.recAuto) { state.recAuto = false; go(); }
     ['#recSit', '#recKw'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }));
   }
   function recCard(c, i) {
@@ -1115,6 +1199,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     window.addEventListener('hashchange', router);
     await router();
     refreshMe();
+    if (!location.hash || location.hash === '#/' || location.hash === '#') showPromos();
   })();
 })();
 

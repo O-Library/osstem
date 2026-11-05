@@ -5,8 +5,8 @@ code=open('/home/claude/osstem-deploy/Code.gs').read()
 bundle='\n'.join([
   '// 오스템문고 데모 번들: 서버(Apps Script) 코드를 브라우저 안에서 실행합니다.',
   f'window.__BOOKS = {books};', f'window.__LOANS = {loans};',
-  open(f'{M}/mock-browser.js').read(), code, open(f'{M}/seed-real.js').read(), open(f'{M}/demo-ui.js').read()])
-open('/home/claude/osstem-web/docs/demo.js','w').write(bundle)
+  open(f'{M}/mock-browser.js').read(), code, open(f'{M}/seed-real.js').read()])
+open('/home/claude/osstem/docs/demo.js','w').write(bundle)
 # 아티팩트 단일 페이지
 src=open('/home/claude/osstem-gas/Index.html').read()
 style=re.search(r'<style>([\s\S]*?)</style>', src).group(1)
