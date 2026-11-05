@@ -480,10 +480,46 @@ function defaultCategories_() {
 }
 
 var _cats = null;
+// 화면에 보이는 '보기 분류' (도서코드·소분류 번호는 그대로, 비슷한 소분류를 묶어서 보여 주기만 함)
+// 관리자 화면 → 분류 관리에서 소분류마다 바꿀 수 있고, 바꾼 값은 설정(viewMap)에 저장
+var VIEW_DEFAULT = {
+  '103': '경영전략·혁신', '104': '경영전략·혁신', '105': '경영전략·혁신', '107': '경영전략·혁신', '110': '경영전략·혁신', '111': '경영전략·혁신',
+  '116': '경영전략·혁신', '118': '경영전략·혁신', '121': '경영전략·혁신', '124': '경영전략·혁신', '126': '경영전략·혁신', '127': '경영전략·혁신',
+  '130': '경영전략·혁신', '141': '경영전략·혁신', '102': '조직·인사', '108': '조직·인사', '109': '조직·인사', '117': '조직·인사',
+  '135': '조직·인사', '101': '마케팅·영업', '106': '마케팅·영업', '113': '마케팅·영업', '114': '마케팅·영업', '140': '마케팅·영업',
+  '112': '경제·트렌드', '115': '경제·트렌드', '120': '경제·트렌드', '122': '경제·트렌드', '125': '경제·트렌드', '128': '경제·트렌드',
+  '133': '경제·트렌드', '134': '경제·트렌드', '136': '경제·트렌드', '142': '경제·트렌드', '143': '경제·트렌드', '123': '재테크·금융',
+  '137': '재테크·금융', '131': '재무·회계', '132': '재무·회계', '139': '재무·회계', '119': '생산·물류·창업', '129': '생산·물류·창업',
+  '138': '생산·물류·창업', '202': '리더십·직장생활', '203': '리더십·직장생활', '206': '리더십·직장생활', '214': '리더십·직장생활', '221': '리더십·직장생활',
+  '207': '말하기·관계', '208': '말하기·관계', '210': '말하기·관계', '211': '말하기·관계', '213': '말하기·관계', '217': '말하기·관계',
+  '224': '말하기·관계', '209': '기획·글쓰기', '216': '기획·글쓰기', '218': '기획·글쓰기', '219': '기획·글쓰기', '223': '기획·글쓰기',
+  '205': '자기관리·습관', '212': '자기관리·습관', '220': '자기관리·습관', '227': '자기관리·습관', '201': '삶의 지혜·진로', '204': '삶의 지혜·진로',
+  '215': '삶의 지혜·진로', '222': '삶의 지혜·진로', '225': '삶의 지혜·진로', '226': '삶의 지혜·진로', '301': '한국사', '307': '한국사',
+  '302': '세계사', '303': '세계사', '304': '세계사', '305': '세계사', '306': '세계사', '308': '세계사',
+  '309': '세계사', '401': '인문교양', '405': '인문교양', '408': '인문교양', '402': '철학', '403': '철학',
+  '409': '철학', '404': '심리', '406': '심리', '407': '예술·대중문화', '501': '외국어', '502': '외국어',
+  '503': '외국어', '601': '한국소설', '602': '한국소설', '605': '한국소설', '604': '외국소설', '606': '외국소설',
+  '607': '외국소설', '608': '외국소설', '603': 'SF', '701': '에세이·시', '702': '에세이·시', '703': '에세이·시',
+  '704': '에세이·시', '802': '과학 이야기', '803': '과학 이야기', '805': '과학 이야기', '801': '뇌·생명과학', '804': '뇌·생명과학',
+  '806': '뇌·생명과학', '1004': '사회', '1005': '사회', '1008': '사회', '1001': '정치·법', '1002': '정치·법',
+  '1003': '정치·법', '1006': '정치·법', '1007': '정치·법', '1109': 'AI·IT', '1111': 'AI·IT', '1103': '엑셀·PPT·업무툴',
+  '1104': '엑셀·PPT·업무툴', '1105': '엑셀·PPT·업무툴', '1106': '엑셀·PPT·업무툴', '1101': '개발·UX', '1102': '개발·UX', '1107': '개발·UX',
+  '1108': '개발·UX', '1110': '개발·UX', '1112': '개발·UX', '1301': '의학·치과', '1302': '의학·치과'
+};
+function viewOf_(c) { var m = settings_().viewMap || {}; return m[c.code] || VIEW_DEFAULT[c.code] || c.name; }
+function setCategoryView_(code, view) {
+  var c = categories_().filter(function (x) { return x.code === String(code); })[0];
+  if (!c) throw new AppError('분류를 찾을 수 없습니다.');
+  var s = settings_(); s.viewMap = s.viewMap || {};
+  view = String(view || '').trim().slice(0, 30);
+  if (view && view !== VIEW_DEFAULT[c.code]) s.viewMap[c.code] = view; else delete s.viewMap[c.code];
+  saveSettings_(s); _cats = null;
+  return { ok: true, view: viewOf_(c) };
+}
 function categories_() {
   if (_cats) return _cats;
   var list = rows_('categories').filter(function (c) { return /^\d{3,4}$/.test(c.code); });
-  list.forEach(function (c) { c.group = groupOf_(c.code); c.isGroup = c.code.slice(-2) === '00'; });
+  list.forEach(function (c) { c.group = groupOf_(c.code); c.isGroup = c.code.slice(-2) === '00'; c.view = c.isGroup ? c.name : viewOf_(c); });
   list.sort(function (a, b) { return Number(a.code) - Number(b.code); });
   _cats = list;
   return list;
@@ -829,7 +865,7 @@ function catalog_() {
   });
   var list = order.map(function (k) { var t = map[k]; t.isNew = !!t.createdAt && t.createdAt.slice(0, 10) >= newSince; t.waiting = waiting[k] || 0; return t; })
     .filter(function (t) { return t.copies > 0; });
-  var out = { items: list, groups: categories_().map(function (c) { return { code: c.code, name: c.name, group: c.group, isGroup: c.isGroup }; }) };
+  var out = { items: list, groups: categories_().map(function (c) { return { code: c.code, name: c.name, group: c.group, isGroup: c.isGroup, view: c.view }; }) };
   cachePut_(cache, 'catalog_v2', out, 600);
   return out;
 }
@@ -1491,6 +1527,7 @@ function migrateFromOldSheet_(overwrite) {
       if (/^\d+$/.test(pno) && pno.length < 3) pno = ('00' + pno).slice(-3);
       var code = cat + '-' + pno + '-' + cno;
       var isbn = String(g(r, '바코드')).replace(/\D/g, '');
+      if (/^97[89]\d{15}$/.test(isbn)) isbn = isbn.slice(0, 13); // 바코드 뒤에 붙은 부가기호 5자리 제거
       var b = existing[code];
       if (b && !overwrite) { if (!b.isbn && isbn) { b.isbn = isbn; out.push(b); } return; }
       b = b || { code: code, status: 'active', createdAt: '', cover: '', description: '' };
@@ -1595,19 +1632,20 @@ var SITUATIONS = [
   { id: 'report', label: '보고·보고서를 잘하고 싶어요', trig: ['보고하', '보고를', '보고가', '보고할', '보고드', '보고서', '중간보고', '문서', '글쓰기', '기획서', '작성', '문장', '결재', '요약', '두괄식'], kw: ['보고', '보고서', '글쓰기', '문장', '설명', '기획', '문서', '논리', '요약', '두괄식', '파워포인트'], cats: ['223', '218', '209', '203', '408', '1103'] },
   { id: 'speak', label: '말하기·발표가 어려워요', trig: ['발표', '말하기', '말을', '말이', '말솜씨', '설명', '프레젠테이션', '피티', '스피치', '말투', '화술', '전달', '앞에서'], kw: ['말하기', '발표', '프레젠테이션', '화술', '대화', '말투', '설명', '전달'], cats: ['217', '207', '211'] },
   { id: 'people', label: '동료·상사와 관계가 힘들어요', trig: ['관계', '갈등', '인간관계', '무례', '눈치', '사이가', '사이도', '싫어하', '싫은사람', '싫은동료', '싫은상사', '미워', '미운', '얄미', '꼴보기', '괴롭', '뒷담', '서운', '따돌', '불편한사람'], weak: ['상사', '동료', '선배', '사람'], kw: ['관계', '대인', '갈등', '감정', '심리', '말투', '무례', '대화', '불편한'], cats: ['210', '404', '211'] },
+  { id: 'hr', label: '인사·조직 이슈가 궁금해요', trig: ['인사', 'hr', '채용', '면접', '평가제도', '인사평가', '성과평가', '보상', '연봉', '성과관리', '조직문화', '기업문화', '노무', '근로', '이직률', '퇴사율', '인재', '직무분석', '교육담당', '몰입', '리텐션'], kw: ['인사', '채용', '평가', '보상', '조직문화', '인재', '성과', '동기', '조직', '역량', '직무'], cats: ['108', '135', '109', '117', '1008'] },
   { id: 'cs', label: '고객 응대가 어려워요', trig: ['고객', '컴플레인', '클레임', '불만', '진상', '응대', '민원', '화를내', '항의'], kw: ['고객', '서비스', '응대', '불만', '감정', '설득', '대화'], cats: ['106', '101', '211', '217'] },
   { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '지쳤', '피곤', '우울', '불안', '스트레스', '무기력', '의욕', '잠이안', '불면', '가기싫', '출근하기싫', '하기싫', '퇴사'], weak: ['힘들', '힘든', '버거'], kw: ['번아웃', '마음', '회복', '위로', '쉼', '피곤', '불안', '휴식'], cats: ['404', '701', '222'] },
   { id: 'time', label: '시간 관리·습관을 잡고 싶어요', trig: ['시간관리', '시간', '일정', '미루', '루틴', '습관', '집중', '계획', '바빠', '바쁜'], kw: ['시간', '습관', '루틴', '집중', '계획', '자기관리', '성과'], cats: ['212', '205', '220', '227'] },
   { id: 'ai', label: 'AI를 업무에 쓰고 싶어요', trig: ['ai', '인공지능', '챗gpt', '지피티', 'gpt', '제미나이', '클로드', '자동화', '프롬프트', '코파일럿'], kw: ['ai', '인공지능', '챗gpt', '제미나이', '클로드', '자동화', '프롬프트'], cats: ['1111', '1104', '1109'] },
   { id: 'data', label: '숫자·데이터에 강해지고 싶어요', trig: ['숫자', '데이터', '통계', '회계', '재무제표', '엑셀', '분석'], kw: ['데이터', '숫자', '통계', '회계', '재무제표', '엑셀', '분석'], cats: ['132', '139', '1105', '1106'] },
   { id: 'think', label: '생각 정리·문제 해결을 잘하고 싶어요', trig: ['생각', '정리', '문제해결', '논리', '사고', '아이디어', '창의'], kw: ['생각', '정리', '문제해결', '사고', '전략', '아이디어', '논리'], cats: ['219', '218', '216'] },
-  { id: 'trend', label: '트렌드·시야를 넓히고 싶어요', trig: ['트렌드', '미래', '시야', '교양', '흐름', '변화', '유행', '요즘사람', '소비', '좋아하는지', 'mz'], kw: ['트렌드', '미래', '경제', '세계', '교양', '변화', '소비', '브랜드'], cats: ['112', '136', '401', '114'] },
+  { id: 'trend', label: '트렌드·시야를 넓히고 싶어요', modifier: true, trig: ['트렌드', '미래', '시야', '교양', '흐름', '변화', '유행', '요즘사람', '소비', '좋아하는지', 'mz', '이슈', '화두', '최신'], kw: ['트렌드', '미래', '경제', '세계', '교양', '변화', '소비', '브랜드'], cats: ['112', '136', '401', '114'] },
   { id: 'money', label: '재테크·경제 공부를 하고 싶어요', trig: ['재테크', '투자', '주식', '돈', '부자', '금융', '경제', '연금', '저축'], kw: ['재테크', '돈', '투자', '부', '경제', '금융', '주식'], cats: ['137', '123', '136'] },
   { id: 'lang', label: '외국어 공부를 하고 싶어요', trig: ['영어', '중국어', '일본어', '외국어', '회화', '토익', '오픽'], kw: ['영어', '중국어', '일본어', '회화', '비즈니스'], cats: ['501', '502', '503'] },
   { id: 'read', label: '가볍게 읽을 책을 찾아요', trig: ['소설', '에세이', '시집', '가볍게', '재밌는', '재미있는', '힐링', '쉬어가', '머리식'], kw: ['소설', '에세이', '이야기'], cats: ['601', '602', '603', '604', '605', '607', '701', '702'] },
 ];
 
-var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요'];
+var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요', '가장', '궁금', '궁금해요', '이슈', '바꾸고', '알고', '큰'];
 var ENDINGS = /([가-힣]{2,}요|어야|아야|쳐야|어서|아서|돼요|와요|세요|해야|야지|건지|는지도|는데|어요|아요|여요|해요|워요|려요|에요|예요|네요|고요|지요|죠|습니다|니다|지만|는지|을까|ㄹ까|할까|한데|했는데|겠어요|싶고)$/;
 // 상황을 설명하는 말일 뿐 책 주제가 아닌 단어 (제목에 있어도 점수를 적게)
 var CONTEXT_WORDS = ['상사', '동료', '선배', '후배', '사원', '회사', '직장', '업무', '팀', '팀에', '사람', '사람들', '고객', '요즘', '다시', '앞에서', '말을', '일이', '마음'];
@@ -1631,7 +1669,7 @@ function terms_(text) {
   return out.slice(0, 12);
 }
 function situationsFrom_(ids, text) {
-  var picked = [], t = normStr_(text), fromText = [];
+  var picked = [], t = normStr_(text).replace(/인사이트|인사말|인사성/g, ''), fromText = [];
   var has = function (w) { return t.indexOf(normStr_(w)) >= 0; };
   SITUATIONS.forEach(function (s) {
     if ((ids || []).indexOf(s.id) >= 0) picked.push(s);
@@ -1667,9 +1705,10 @@ function scoreBook_(d, prof) {
     var mine = prof.userTerms.indexOf(term) >= 0;
     // 직접 적은 두 글자 말은 낱말 첫머리에서만 인정 ('화를'이 '대화를'에 걸리지 않게)
     var inTitle = mine && n.length <= 2 ? d.tw.some(function (w) { return w.indexOf(n) === 0; }) : d.title.indexOf(n) >= 0;
-    if (inTitle) { s += 4; hits++; why.title.push(term); }
-    else if (d.catName.indexOf(n) >= 0) { s += 2.5; hits++; why.catFrom = why.catFrom || 'term'; }
-    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5; hits++; why.desc.push(term); }
+    var m = mine ? 1.5 : 1, counts = mine || !prof.modKw[n]; // 직접 적은 말은 더 무겁게, 트렌드 같은 꾸밈 고민의 낱말은 근거 수에서 뺌
+    if (inTitle) { s += 4 * m; if (counts) hits++; why.title.push(term); }
+    else if (d.catName.indexOf(n) >= 0) { s += 2.5 * m; if (counts) hits++; why.catFrom = why.catFrom || 'term'; }
+    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5 * m; if (counts) hits++; why.desc.push(term); }
     else if (d.catKw.indexOf(n) >= 0) { s += 1.5; }
   });
   var c = prof.cats[d.t.catCode] || prof.cats[d.t.group];
@@ -1680,6 +1719,7 @@ function scoreBook_(d, prof) {
   if (rel <= 0) return null;
   s += Math.min(Number(d.t.loanCount) || 0, 30) * 0.05;
   if (d.t.isNew) s += 0.4;
+  var yr = String(d.t.title).match(/20(1\d|2\d)/); if (yr) s += Math.max(0, Number(yr[0]) - 2018) * 0.2; // 『트렌드 코리아』 같은 연도판은 최신판 먼저
   why.popular = (Number(d.t.loanCount) || 0) >= 5;
   return { d: d, score: s, rel: rel, why: why };
 }
@@ -1694,9 +1734,14 @@ function profile_(input) {
   sits.forEach(function (s) { s.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); }); });
   var cats = {};
   if (job) job.cats.forEach(function (code) { cats[code] = { w: 1.5, from: 'job', label: job.name }; });
-  sits.forEach(function (s) { s.cats.forEach(function (code) { cats[code] = { w: 3, from: 'sit', label: s.label }; }); });
+  var main = sits.filter(function (s) { return !s.modifier; });
+  // '트렌드'는 다른 고민과 같이 나오면 그 주제의 최신 흐름이라는 뜻 → 분야는 주제 쪽만 ('인사 이슈' → 인사 분야 + 트렌드 낱말)
+  (main.length ? main : sits).forEach(function (s) { s.cats.forEach(function (code) { cats[code] = { w: 3, from: 'sit', label: s.label }; }); });
   if (job && !userTerms.length && !sits.length) job.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); });
-  return { job: job, sits: sits, userTerms: userTerms, terms: terms, cats: cats };
+  var modKw = {};
+  if (main.length) sits.forEach(function (s) { if (s.modifier) s.kw.forEach(function (k) { modKw[normStr_(k)] = 1; }); });
+  main.forEach(function (s) { s.kw.forEach(function (k) { delete modKw[normStr_(k)]; }); });
+  return { job: job, sits: sits, userTerms: userTerms, terms: terms, cats: cats, modKw: modKw };
 }
 
 function reasonOf_(x, prof) {
@@ -2097,6 +2142,7 @@ var ADMIN_API = {
   },
   nextCategoryCode: function (g) { return nextCategoryCode_(g); },
   addCategory: function (code, name, kw) { return withLock_(function () { return addCategory_(code, name, kw); }); },
+  setCategoryView: function (code, view) { return withLock_(function () { return setCategoryView_(code, view); }); },
   updateCategory: function (code, kw) { return withLock_(function () { return updateCategory_(code, kw); }); },
   settings: function () {
     var k = apiKeys_();
