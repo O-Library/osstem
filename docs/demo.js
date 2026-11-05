@@ -70,7 +70,7 @@ window.__CATS = [["소분류","분류상세"],["100","경영/경제"],["101","CS
   };
   window.google = { script: { run: new Runner() } };
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
-  var KEY = 'osstem-demo-v7';
+  var KEY = 'osstem-demo-v8';
   window.__demoSave = function () {
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };
@@ -266,7 +266,7 @@ var DEFAULT_SETTINGS = {
   location: 'EAST동 9층 스마트 오피스존 (인사본부 방향 중앙복도)',
   managerName: '인재개발팀 장유영 사원',
   managerPhone: '070-8644-7372',
-  managerEmail: '',
+  managerEmail: 'yuyoung2@osstem.com',
   loanDays: 21, extendDays: 7, maxExtensions: 1, maxLoansPerUser: 5,
   blockWhenOverdue: true, autoApproveExtension: true, autoConfirmReturn: false, newBookDays: 60,
   mail: { enabled: true, sendHour: 9, dueSoonDays: [3, 0], overdueRepeatDays: 3, adminDigest: true, ccAdminOnOverdue: false },
