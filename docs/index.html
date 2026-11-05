@@ -415,9 +415,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   <div class="alerts" id="alerts"></div>
   <main id="view"></main>
   <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
-  <script src="config.js?v=mw396f9b"></script>
+  <script src="config.js?v=mw39mddd"></script>
   <script>window.APP_MODE = 'user';</script>
-  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw396f9b"><\/script>');</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw39mddd"><\/script>');</script>
   <script>var BOOT = {};</script>
   <script>
 (() => {
@@ -796,7 +796,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   async function recPromo() {
     let o; try { o = state.recOpt || (state.recOpt = await api('recommendOptions')); } catch (e) { return; }
     const pick = { job: '', situations: [] };
-    const top = ['leader', 'report', 'speak', 'ai', 'data', 'rest'];
+    const top = ['newbie', 'leader', 'report', 'speak', 'ai', 'data', 'rest'];
     const m = modal(`<div class="promo">
       <div class="promo-hero"><div><div class="promo-eyebrow">책 추천</div>
       <h2>지금 나에게 필요한 책, 레오거가 골라 드려요</h2></div><img class="promo-leo" src="${LEO}" alt="책 읽는 레오거"></div>
