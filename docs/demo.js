@@ -1667,6 +1667,7 @@ var SITUATIONS = [
   { id: 'cs', label: '고객 응대가 어려워요', trig: ['고객', '컴플레인', '클레임', '불만', '진상', '응대', '민원', '화를내', '항의'], kw: ['고객', '서비스', '응대', '불만', '감정', '설득', '대화'], cats: ['106', '101', '211', '217'] },
   { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '지쳤', '피곤', '우울', '불안', '스트레스', '무기력', '의욕', '잠이안', '불면', '가기싫', '출근하기싫', '하기싫', '퇴사'], weak: ['힘들', '힘든', '버거'], kw: ['번아웃', '마음', '회복', '위로', '쉼', '피곤', '불안', '휴식'], cats: ['404', '701', '222'] },
   { id: 'time', label: '시간 관리·습관을 잡고 싶어요', trig: ['시간관리', '시간', '일정', '미루', '루틴', '습관', '집중', '계획', '바빠', '바쁜'], kw: ['시간', '습관', '루틴', '집중', '계획', '자기관리', '성과'], cats: ['212', '205', '220', '227'] },
+  { id: 'health', label: '건강·운동을 챙기고 싶어요', trig: ['건강', '운동', '다이어트', '살빼', '체중', '식단', '수면', '잠을', '허리', '거북목', '스트레칭', '헬스', '요가', '걷기'], kw: ['건강', '운동', '몸', '습관', '식단', '수면', '다이어트'], cats: ['1201', '205'] },
   { id: 'ai', label: 'AI를 업무에 쓰고 싶어요', trig: ['ai', '인공지능', '챗gpt', '지피티', 'gpt', '제미나이', '클로드', '자동화', '프롬프트', '코파일럿'], kw: ['ai', '인공지능', '챗gpt', '제미나이', '클로드', '자동화', '프롬프트'], cats: ['1111', '1104', '1109'] },
   { id: 'data', label: '숫자·데이터에 강해지고 싶어요', trig: ['숫자', '데이터', '통계', '회계', '재무제표', '엑셀', '분석'], kw: ['데이터', '숫자', '통계', '회계', '재무제표', '엑셀', '분석'], cats: ['132', '139', '1105', '1106'] },
   { id: 'think', label: '생각 정리·문제 해결을 잘하고 싶어요', trig: ['생각', '정리', '문제해결', '논리', '사고', '아이디어', '창의'], kw: ['생각', '정리', '문제해결', '사고', '전략', '아이디어', '논리'], cats: ['219', '218', '216'] },
@@ -1729,21 +1730,25 @@ function corpus_() {
 }
 
 function scoreBook_(d, prof) {
-  var s = 0, hits = 0, why = { title: [], desc: [], cat: null, catFrom: '', popular: false };
+  var s = 0, hits = 0, kwHit = false, why = { title: [], desc: [], cat: null, catFrom: '', popular: false };
   prof.terms.forEach(function (term) {
     var n = normStr_(term); if (n.length < 2) return;
     if (CONTEXT_WORDS.indexOf(n) >= 0) { if (d.title.indexOf(n) >= 0) s += 0.3; return; }
     var mine = prof.userTerms.indexOf(term) >= 0;
     // 직접 적은 두 글자 말은 낱말 첫머리에서만 인정 ('화를'이 '대화를'에 걸리지 않게)
     var inTitle = mine && n.length <= 2 ? d.tw.some(function (w) { return w.indexOf(n) === 0; }) : d.title.indexOf(n) >= 0;
+    var isKw = prof.kwTerms.indexOf(term) >= 0;
     var m = mine ? 1.5 : 1, counts = mine || !prof.modKw[n]; // 직접 적은 말은 더 무겁게, 트렌드 같은 꾸밈 고민의 낱말은 근거 수에서 뺌
-    if (inTitle) { s += 4 * m; if (counts) hits++; why.title.push(term); }
-    else if (d.catName.indexOf(n) >= 0) { s += 2.5 * m; if (counts) hits++; why.catFrom = why.catFrom || 'term'; }
-    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5 * m; if (counts) hits++; why.desc.push(term); }
+    if (inTitle) { s += 4 * m; if (counts) hits++; if (isKw) kwHit = true; why.title.push(term); }
+    else if (d.catName.indexOf(n) >= 0) { s += 2.5 * m; if (counts) hits++; if (isKw) kwHit = true; why.catFrom = why.catFrom || 'term'; }
+    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5 * m; if (counts) hits++; if (isKw) kwHit = true; why.desc.push(term); }
     else if (d.catKw.indexOf(n) >= 0) { s += 1.5; }
   });
   var c = prof.cats[d.t.catCode] || prof.cats[d.t.group];
   if (c) { s += c.w; why.cat = c; }
+  // 적은 고민을 하나도 못 알아들었으면(예: '배고프다') 직무 분야만으로 아무 책이나 추천하지 않음.
+  //   이때는 직접 적은 낱말이 책 제목·소개와 두 개 이상 맞거나, 관심 키워드 칸에 적은 말이 맞을 때만 추천
+  if (!prof.sits.length && prof.freeText && !kwHit && hits < 2) return null;
   // 고민이 잡혔는데 그 고민 분야 밖의 책이면, 낱말이 두 개 이상 맞을 때만 추천
   if (prof.sits.length && !(c && c.from === 'sit') && hits < 2) return null;
   var rel = s;
@@ -1761,6 +1766,7 @@ function profile_(input) {
   var sits = situationsFrom_(input.situations, free);
   var userTerms = terms_(input.keywords).concat(terms_(free).filter(function (t) { return terms_(input.keywords).indexOf(t) < 0; }))
     .filter(function (t) { return CONTEXT_WORDS.indexOf(normStr_(t)) < 0; });
+  var kwTerms = terms_(input.keywords);
   var terms = userTerms.slice();
   sits.forEach(function (s) { s.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); }); });
   var cats = {};
@@ -1772,7 +1778,7 @@ function profile_(input) {
   var modKw = {};
   if (main.length) sits.forEach(function (s) { if (s.modifier) s.kw.forEach(function (k) { modKw[normStr_(k)] = 1; }); });
   main.forEach(function (s) { s.kw.forEach(function (k) { delete modKw[normStr_(k)]; }); });
-  return { job: job, sits: sits, userTerms: userTerms, terms: terms, cats: cats, modKw: modKw };
+  return { job: job, sits: sits, userTerms: userTerms, kwTerms: kwTerms, freeText: !!free.trim(), terms: terms, cats: cats, modKw: modKw };
 }
 
 function reasonOf_(x, prof) {
@@ -1796,7 +1802,17 @@ function bookCard_(x, prof) {
 function recommend_(input) {
   input = input || {};
   var prof = profile_(input);
-  if (!prof.job && !prof.terms.length) throw new AppError('직무 그룹이나 고민·관심 키워드를 하나 이상 알려 주세요.');
+  if (!prof.job && !prof.terms.length && !String(input.situation || input.keywords || '').trim()) throw new AppError('직무 그룹이나 고민·관심 키워드를 하나 이상 알려 주세요.');
+  // 적은 고민을 하나도 알아듣지 못하면(예: '배고프다') 직무만으로 엉뚱한 책을 내밀지 않고 다시 물어봄
+  var freeText = String(input.situation || '').trim();
+  if (freeText && !String(input.keywords || '').trim() && !prof.sits.length && !(input.situations || []).length) {
+    var mine = prof.userTerms.map(normStr_).filter(function (t) { return t.length >= 2; });
+    var anyHit = mine.length && corpus_().some(function (d) { return mine.some(function (t) { return d.tw.some(function (w) { return w.indexOf(t) === 0; }) || d.catName.indexOf(t) >= 0; }); });
+    if (!anyHit) {
+      logSearch_({ source: 'recommend', job: prof.job ? prof.job.id : '', situations: [], terms: prof.userTerms, hits: 0, topScore: 0 });
+      return { cards: [], matched: 0, unknown: true, text: freeText.slice(0, 40), understood: { job: prof.job ? prof.job.name : '', situations: [], keywords: prof.userTerms }, weak: false };
+    }
+  }
   var ranked = corpus_().map(function (d) { return scoreBook_(d, prof); }).filter(Boolean)
     .filter(function (x) { return x.rel >= 2.5; })
     .sort(function (a, b) { return b.score - a.score; });
@@ -1824,6 +1840,7 @@ function recommend_(input) {
     cards: cards, matched: ranked.length,
     understood: { job: prof.job ? prof.job.name : '', situations: prof.sits.map(function (s) { return s.label; }), keywords: prof.userTerms },
     weak: ranked.length < 3,
+    unclear: prof.freeText && !prof.sits.length && !cards.length,
   };
 }
 
