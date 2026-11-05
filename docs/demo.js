@@ -1550,6 +1550,23 @@ function headerIdx_(values, must) {
   throw new AppError("'" + must + "' 머리글을 찾지 못했습니다.");
 }
 
+// 사원명부 통째로 바꾸기 (관리자 화면에서 엑셀 붙여넣기/CSV): rows = [[사번, 성명, 소속, 이메일], ...]
+function importEmployees_(rows) {
+  rows = (rows || []).map(function (r) { return [normEmp_(r[0]), String(r[1] || '').trim(), String(r[2] || '').trim(), String(r[3] || '').trim()]; })
+    .filter(function (r) { return r[0] && r[1] && !/사번|EMP/i.test(r[0]); });
+  if (!rows.length) throw new AppError('사번·성명이 있는 행을 찾지 못했습니다. 사번·성명·소속·이메일 4열을 붙여넣어 주세요.');
+  var seen = {}, dup = [];
+  rows.forEach(function (r) { if (seen[r[0]]) dup.push(r[0]); seen[r[0]] = 1; });
+  if (dup.length) throw new AppError('사번이 중복됩니다: ' + dup.slice(0, 5).join(', '));
+  var sh = db_().getSheetByName('사원명부');
+  var last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, 4).setValues(Array.apply(null, Array(last - 1)).map(function () { return ['', '', '', '']; }));
+  sh.getRange(2, 1, rows.length, 4).setValues(rows);
+  _tables = {}; _empMap = null;
+  var m = matchEmployees_();
+  return { count: rows.length, noEmail: rows.filter(function (r) { return !r[3]; }).length, matched: m.matched };
+}
+
 // ===== Recommend.gs =====
 // ─────────────────────────────────────────────────────
 // 상황·직무 기반 도서 추천 (개인정보 없음: 사번·이름·교육이력을 받지 않음)
@@ -2053,7 +2070,7 @@ var ADMIN_API = {
   settings: function () {
     var k = apiKeys_();
     return { settings: settings_(), providers: providers_(), keys: { kakao: k.kakao ? '설정됨' : '', nl: k.nl ? '설정됨' : '', naverId: k.naverId ? '설정됨' : '' },
-      dbUrl: db_().getUrl(), quota: mailQuota_(), webUrl: props_().getProperty('WEBAPP_URL') || '' };
+      dbUrl: db_().getUrl(), storage: props_().getProperty('STORAGE_INFO') || '', quota: mailQuota_(), webUrl: props_().getProperty('WEBAPP_URL') || '' };
   },
   saveSettings: function (s) {
     var cur = settings_();
@@ -2070,9 +2087,10 @@ var ADMIN_API = {
   changePassword: function (pw) { if (!pw || String(pw).length < 8) throw new AppError('비밀번호는 8자 이상으로 정해 주세요.'); props_().setProperty('ADMIN_PASSWORD', String(pw)); return { ok: true }; },
   employeesInfo: function () {
     var emps = rows_('employees');
-    return { count: emps.length, noEmail: emps.filter(function (e) { return !e.email; }).length, url: db_().getUrl() + '#gid=' + db_().getSheetByName('사원명부').getSheetId() };
+    return { count: emps.length, noEmail: emps.filter(function (e) { return !e.email; }).length, url: db_().getUrl() ? db_().getUrl() + '#gid=' + db_().getSheetByName('사원명부').getSheetId() : '' };
   },
   matchEmployees: function () { return withLock_(function () { return matchEmployees_(); }); },
+  importEmployees: function (rows) { return withLock_(function () { return importEmployees_(rows); }); },
   migrate: function (overwrite) { return withLock_(function () { return migrateFromOldSheet_(!!overwrite); }); },
   wishAdmin: function () { return adminWish_(); },
   updateRequest: function (id, patch) { return withLock_(function () { return updateRequest_(id, patch); }); },
