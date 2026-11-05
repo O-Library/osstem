@@ -721,6 +721,36 @@ function searchBooks_(input) {
   return list.sort(function (a, b) { return score(b) - score(a); });
 }
 
+// 원본 시트에 바코드(ISBN)가 없는 책: 제목·출판사·저자로 찾아서 확실할 때만 ISBN·표지를 채움
+//   (카카오·네이버·국립중앙도서관 키가 있을 때 정확도가 높고, 없으면 Google Books만 사용)
+function fillByTitle_(limit) {
+  var books = rows_('books').filter(function (b) { return !b.isbn && !b.cover && !b.coverCheckedAt && b.status !== 'discarded' && b.title; });
+  var byTitle = {}; books.forEach(function (b) { var k = titleKey_(b); (byTitle[k] = byTitle[k] || []).push(b); });
+  var keys = Object.keys(byTitle).slice(0, limit || 20);
+  var n = function (s) { return String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, '').replace(/[^0-9a-z가-힣]/g, ''); };
+  var found = 0, changed = [], stamp = today_();
+  keys.forEach(function (k) {
+    var b0 = byTitle[k][0], hit = null;
+    try {
+      var main = String(b0.title).split(/[:：]/)[0];
+      hit = searchBooks_({ title: main, author: String(b0.author || '').split(/[,\s]/)[0], publisher: b0.publisher }).filter(function (r) {
+        var sc = 0;
+        if (n(r.title).indexOf(n(main)) === 0) sc += 3;
+        if (b0.publisher && n(r.publisher).indexOf(n(b0.publisher).slice(0, 2)) >= 0) sc += 2;
+        if (b0.author && n(r.author).indexOf(n(String(b0.author).split(/[,\s]/)[0])) >= 0) sc += 2;
+        return r.isbn && String(r.isbn).length === 13 && sc >= 5; // 제목 + (출판사 또는 저자)가 맞아야 채움
+      })[0] || null;
+    } catch (e) { hit = null; }
+    byTitle[k].forEach(function (b) {
+      if (hit) { b.isbn = hit.isbn; b.cover = hit.cover && hit.source !== 'google' ? hit.cover : kyoboCover_(hit.isbn); if (!b.description && hit.description) b.description = String(hit.description).slice(0, 3000); }
+      b.coverCheckedAt = stamp; changed.push(b);
+    });
+    if (hit) found++;
+  });
+  save_('books', changed);
+  return { checked: keys.length, found: found, remaining: Object.keys(byTitle).length - keys.length };
+}
+
 function kyoboCover_(isbn) { return 'https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/' + isbn + '.jpg'; }
 function links_(isbn, title) {
   return { kyobo: 'https://search.kyobobook.co.kr/search?keyword=' + encodeURIComponent(isbn || title), nl: 'https://www.nl.go.kr/NL/contents/search.do?srchTarget=total&kwd=' + encodeURIComponent(isbn || title) };
@@ -738,7 +768,8 @@ function fillCovers_(limit) {
   var books = rows_('books').filter(function (b) { return b.isbn && !b.cover && !b.coverCheckedAt && b.status !== 'discarded'; });
   var byIsbn = {}; books.forEach(function (b) { (byIsbn[b.isbn] = byIsbn[b.isbn] || []).push(b); });
   var isbns = Object.keys(byIsbn).slice(0, limit || 120);
-  if (!isbns.length) return { checked: 0, found: 0, remaining: 0 };
+  var noIsbn = fillByTitle_(20);
+  if (!isbns.length) return { checked: noIsbn.checked, found: noIsbn.found, remaining: noIsbn.remaining, isbnFilled: noIsbn.found };
   var resp;
   try { resp = UrlFetchApp.fetchAll(isbns.map(function (i) { return { url: kyoboCover_(i), muteHttpExceptions: true, followRedirects: true }; })); } catch (e) { resp = []; }
   var found = 0, missing = [];
@@ -764,7 +795,7 @@ function fillCovers_(limit) {
   isbns.forEach(function (isbn) { byIsbn[isbn].forEach(function (b) { b.coverCheckedAt = stamp; changed.push(b); }); });
   save_('books', changed);
   var remaining = Object.keys(byIsbn).length - isbns.length;
-  return { checked: isbns.length, found: found, remaining: remaining };
+  return { checked: isbns.length + noIsbn.checked, found: found + noIsbn.found, remaining: remaining + noIsbn.remaining, isbnFilled: noIsbn.found };
 }
 
 // 상세 화면에서 소개글이 없으면 1회 조회해 저장

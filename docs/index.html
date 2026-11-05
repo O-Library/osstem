@@ -415,9 +415,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   <div class="alerts" id="alerts"></div>
   <main id="view"></main>
   <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
-  <script src="config.js?v=mw3advjw"></script>
+  <script src="config.js?v=mw3af32y"></script>
   <script>window.APP_MODE = 'user';</script>
-  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw3advjw"><\/script>');</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw3af32y"><\/script>');</script>
   <script>var BOOT = {};</script>
   <script>
 (() => {
@@ -1147,7 +1147,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     };
     $('#chk', pane).onclick = runCheck;
     $('#match', pane).onclick = async () => { const r = await api('matchEmployees'); toast(`${r.matched}건을 사번에 연결했습니다.`); };
-    $('#covers', pane).onclick = async () => { $('#covOut', pane).textContent = '가져오는 중… (1분 정도 걸릴 수 있습니다)'; try { const r = await api('fillCovers'); $('#covOut', pane).textContent = `${r.checked}종 확인, ${r.found}종 표지 저장, 남은 ${r.remaining}종`; state.cat = null; } catch (e) { $('#covOut', pane).textContent = e.message; } };
+    $('#covers', pane).onclick = async () => { $('#covOut', pane).textContent = '가져오는 중… (1분 정도 걸릴 수 있습니다)'; try { const r = await api('fillCovers'); $('#covOut', pane).textContent = `${r.checked}종 확인, ${r.found}종 표지 저장${r.isbnFilled ? ` (바코드 없던 책 ${r.isbnFilled}종은 ISBN도 채움)` : ''}, 남은 ${r.remaining}종`; state.cat = null; } catch (e) { $('#covOut', pane).textContent = e.message; } };
     // CSV 한 줄씩 읽기 (따옴표 안의 쉼표·줄바꿈 처리)
     const parseCSV = (t) => { const rows = []; let row = [], cur = '', q = false; t = t.replace(/^\ufeff/, ''); for (let i = 0; i < t.length; i++) { const ch = t[i]; if (q) { if (ch === '"') { if (t[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; } else if (ch === '"') q = true; else if (ch === ',') { row.push(cur); cur = ''; } else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; } else cur += ch; } if (cur || row.length) { row.push(cur); rows.push(row); } return rows; };
     const readFile = (inp) => new Promise((res) => { const f = inp && inp.files && inp.files[0]; if (!f) return res(null); const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsText(f, 'utf-8'); });
