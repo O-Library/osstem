@@ -1587,24 +1587,30 @@ var JOB_GROUPS = [
   { id: 'support', name: '경영지원·IT', desc: 'IT, 인사, 경영기획, ESG, 재무, 감사, 법무', kw: ['인사', '회계', '재무', '기획', 'it', 'ai', '데이터', '조직', '법률', '전략'], cats: ['108', '131', '132', '135', '103', '1109', '1111', '1007'] },
 ];
 
+// trig: 이 말이 있으면 그 고민으로 봄 / weak: 다른 고민이 하나도 안 잡힐 때만 봄 (예: '상사', '힘들어요')
 var SITUATIONS = [
-  { id: 'leader', label: '첫 팀장이 됐어요', trig: ['팀장', '리더', '관리자', '파트장', '매니저', '승진', '부하', '팀원', '위임'], kw: ['리더', '리더십', '팀장', '코칭', '조직', '위임', '맡기', '피드백', '관리'], cats: ['102', '109', '202', '221'] },
-  { id: 'newbie', label: '신입이라 회사생활이 낯설어요', trig: ['신입', '사회초년생', '초년생', '입사', '막내', '회사생활', '직장생활', '인턴', '첫직장', '첫 직장', '일잘러', '일 잘하'], kw: ['회사생활', '직장생활', '직장인', '신입', '사회초년생', '처세', '태도', '매너', '센스', '일하는'], cats: ['203', '206', '220', '227', '212'] },
-  { id: 'report', label: '보고·보고서를 잘하고 싶어요', trig: ['보고', '보고서', '문서', '글쓰기', '기획서', '작성', '문장', '결재', '요약', '두괄식', '정리해서'], kw: ['보고', '보고서', '글쓰기', '문장', '설명', '기획', '문서', '논리', '요약', '두괄식', '파워포인트'], cats: ['223', '218', '209', '203', '408', '1103'] },
-  { id: 'speak', label: '말하기·발표가 어려워요', trig: ['발표', '말하기', '말을', '말이', '설명', '프레젠테이션', '피티', '스피치', '말투', '화술', '전달'], kw: ['말하기', '발표', '프레젠테이션', '화술', '대화', '말투', '설명', '전달'], cats: ['217', '207', '211'] },
-  { id: 'people', label: '동료·상사와 관계가 힘들어요', trig: ['관계', '갈등', '인간관계', '무례', '눈치', '사이가', '싫어', '미워', '괴롭', '불편', '뒷담', '서운', '따돌'], weak: ['상사', '동료', '선배', '후배'], kw: ['관계', '대인', '갈등', '감정', '심리', '말투', '무례', '대화'], cats: ['210', '404', '211'] },
-  { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '피곤', '우울', '불안', '스트레스', '힘들'], kw: ['번아웃', '마음', '회복', '위로', '감정', '피곤', '불안', '습관'], cats: ['404', '701', '222'] },
-  { id: 'ai', label: 'AI를 업무에 쓰고 싶어요', trig: ['ai', '인공지능', '챗gpt', '지피티', '제미나이', '클로드', '자동화', '프롬프트'], kw: ['ai', '인공지능', '챗gpt', '제미나이', '클로드', '자동화', '프롬프트'], cats: ['1111', '1104', '1109'] },
+  { id: 'newbie', label: '신입이라 회사생활이 낯설어요', trig: ['신입', '사회초년생', '초년생', '입사', '막내', '회사생활', '직장생활', '인턴', '첫직장', '일잘러', '일잘하'], kw: ['회사생활', '직장생활', '직장인', '신입', '사회초년생', '처세', '태도', '매너', '센스', '일하는'], cats: ['203', '206', '220', '227', '212'] },
+  { id: 'leader', label: '첫 팀장이 됐어요', trig: ['팀장', '리더', '관리자', '파트장', '매니저', '승진', '부하직원', '위임', '팀을이끌'], kw: ['리더', '리더십', '팀장', '코칭', '조직', '위임', '맡기', '피드백', '관리'], cats: ['102', '109', '202', '221'] },
+  { id: 'coach', label: '후배를 잘 가르치고 싶어요', trig: ['후배', '가르치', '가르쳐', '코칭', '육성', '온보딩', '사수', '멘토', '피드백'], kw: ['코칭', '피드백', '가르치', '성장', '질문', '리더', '육성', '멘토'], cats: ['202', '221', '102', '109'] },
+  { id: 'report', label: '보고·보고서를 잘하고 싶어요', trig: ['보고하', '보고를', '보고가', '보고할', '보고드', '보고서', '중간보고', '문서', '글쓰기', '기획서', '작성', '문장', '결재', '요약', '두괄식'], kw: ['보고', '보고서', '글쓰기', '문장', '설명', '기획', '문서', '논리', '요약', '두괄식', '파워포인트'], cats: ['223', '218', '209', '203', '408', '1103'] },
+  { id: 'speak', label: '말하기·발표가 어려워요', trig: ['발표', '말하기', '말을', '말이', '말솜씨', '설명', '프레젠테이션', '피티', '스피치', '말투', '화술', '전달', '앞에서'], kw: ['말하기', '발표', '프레젠테이션', '화술', '대화', '말투', '설명', '전달'], cats: ['217', '207', '211'] },
+  { id: 'people', label: '동료·상사와 관계가 힘들어요', trig: ['관계', '갈등', '인간관계', '무례', '눈치', '사이가', '사이도', '싫어하', '싫은사람', '싫은동료', '싫은상사', '미워', '미운', '얄미', '꼴보기', '괴롭', '뒷담', '서운', '따돌', '불편한사람'], weak: ['상사', '동료', '선배', '사람'], kw: ['관계', '대인', '갈등', '감정', '심리', '말투', '무례', '대화', '불편한'], cats: ['210', '404', '211'] },
+  { id: 'cs', label: '고객 응대가 어려워요', trig: ['고객', '컴플레인', '클레임', '불만', '진상', '응대', '민원', '화를내', '항의'], kw: ['고객', '서비스', '응대', '불만', '감정', '설득', '대화'], cats: ['106', '101', '211', '217'] },
+  { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '지쳤', '피곤', '우울', '불안', '스트레스', '무기력', '의욕', '잠이안', '불면', '가기싫', '출근하기싫', '하기싫', '퇴사'], weak: ['힘들', '힘든', '버거'], kw: ['번아웃', '마음', '회복', '위로', '쉼', '피곤', '불안', '휴식'], cats: ['404', '701', '222'] },
+  { id: 'time', label: '시간 관리·습관을 잡고 싶어요', trig: ['시간관리', '시간', '일정', '미루', '루틴', '습관', '집중', '계획', '바빠', '바쁜'], kw: ['시간', '습관', '루틴', '집중', '계획', '자기관리', '성과'], cats: ['212', '205', '220', '227'] },
+  { id: 'ai', label: 'AI를 업무에 쓰고 싶어요', trig: ['ai', '인공지능', '챗gpt', '지피티', 'gpt', '제미나이', '클로드', '자동화', '프롬프트', '코파일럿'], kw: ['ai', '인공지능', '챗gpt', '제미나이', '클로드', '자동화', '프롬프트'], cats: ['1111', '1104', '1109'] },
   { id: 'data', label: '숫자·데이터에 강해지고 싶어요', trig: ['숫자', '데이터', '통계', '회계', '재무제표', '엑셀', '분석'], kw: ['데이터', '숫자', '통계', '회계', '재무제표', '엑셀', '분석'], cats: ['132', '139', '1105', '1106'] },
   { id: 'think', label: '생각 정리·문제 해결을 잘하고 싶어요', trig: ['생각', '정리', '문제해결', '논리', '사고', '아이디어', '창의'], kw: ['생각', '정리', '문제해결', '사고', '전략', '아이디어', '논리'], cats: ['219', '218', '216'] },
-  { id: 'trend', label: '트렌드·시야를 넓히고 싶어요', trig: ['트렌드', '미래', '시야', '교양', '흐름', '변화'], kw: ['트렌드', '미래', '경제', '세계', '교양', '변화'], cats: ['112', '136', '401'] },
-  { id: 'money', label: '재테크·경제 공부를 하고 싶어요', trig: ['재테크', '투자', '주식', '돈', '부자', '금융', '경제'], kw: ['재테크', '돈', '투자', '부', '경제', '금융', '주식'], cats: ['137', '123', '136'] },
+  { id: 'trend', label: '트렌드·시야를 넓히고 싶어요', trig: ['트렌드', '미래', '시야', '교양', '흐름', '변화', '유행', '요즘사람', '소비', '좋아하는지', 'mz'], kw: ['트렌드', '미래', '경제', '세계', '교양', '변화', '소비', '브랜드'], cats: ['112', '136', '401', '114'] },
+  { id: 'money', label: '재테크·경제 공부를 하고 싶어요', trig: ['재테크', '투자', '주식', '돈', '부자', '금융', '경제', '연금', '저축'], kw: ['재테크', '돈', '투자', '부', '경제', '금융', '주식'], cats: ['137', '123', '136'] },
+  { id: 'lang', label: '외국어 공부를 하고 싶어요', trig: ['영어', '중국어', '일본어', '외국어', '회화', '토익', '오픽'], kw: ['영어', '중국어', '일본어', '회화', '비즈니스'], cats: ['501', '502', '503'] },
+  { id: 'read', label: '가볍게 읽을 책을 찾아요', trig: ['소설', '에세이', '시집', '가볍게', '재밌는', '재미있는', '힐링', '쉬어가', '머리식'], kw: ['소설', '에세이', '이야기'], cats: ['601', '602', '603', '604', '605', '607', '701', '702'] },
 ];
 
-var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데'];
-var ENDINGS = /(건지|는지도|는데|어요|아요|여요|해요|워요|려요|에요|예요|네요|고요|지요|죠|습니다|니다|지만|는지|을까|ㄹ까|할까|한데|했는데|겠어요|싶고)$/;
+var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요'];
+var ENDINGS = /([가-힣]{2,}요|어야|아야|쳐야|어서|아서|돼요|와요|세요|해야|야지|건지|는지도|는데|어요|아요|여요|해요|워요|려요|에요|예요|네요|고요|지요|죠|습니다|니다|지만|는지|을까|ㄹ까|할까|한데|했는데|겠어요|싶고)$/;
 // 상황을 설명하는 말일 뿐 책 주제가 아닌 단어 (제목에 있어도 점수를 적게)
-var CONTEXT_WORDS = ['상사', '동료', '선배', '후배', '사원', '회사', '직장', '업무', '팀'];
+var CONTEXT_WORDS = ['상사', '동료', '선배', '후배', '사원', '회사', '직장', '업무', '팀', '팀에', '사람', '사람들', '고객', '요즘', '다시', '앞에서', '말을', '일이', '마음'];
 var JOSA = ['에서는', '으로는', '에게서', '에게', '에서', '으로', '이랑', '하고', '까지', '부터', '처럼', '이나', '이고', '하는', '해요', '은', '는', '이', '가', '을', '를', '에', '의', '도', '와', '과', '로', '랑', '만'];
 
 function stripJosa_(w) {
@@ -1633,7 +1639,10 @@ function situationsFrom_(ids, text) {
   });
   // '상사·동료'만 나오고 보고·말하기·신입 같은 다른 고민이 있으면 관계 고민으로 보지 않음
   //   예) "상사에게 보고하는 게 어려워요" → 보고 / "상사가 너무 싫어요" → 관계
-  if (t && !picked.length && !fromText.length) SITUATIONS.forEach(function (s) { if (s.weak && s.weak.some(has)) fromText.push(s); });
+  if (t && !picked.length && !fromText.length) {
+    var w = SITUATIONS.filter(function (s) { return s.weak && s.weak.some(has); });
+    if (w.length) fromText.push(w[0]); // '사람이 너무 힘들어요' → 관계 하나만
+  }
   fromText.forEach(function (s) { if (picked.indexOf(s) < 0) picked.push(s); });
   return picked;
 }
@@ -1646,22 +1655,27 @@ function corpus_() {
   var kwByCat = {};
   categories_().forEach(function (c) { kwByCat[c.code] = (c.keywords || []).map(normStr_); });
   return cat.items.map(function (t) {
-    return { t: t, title: normStr_(t.title), catName: normStr_(t.catName), desc: normStr_(desc[t.key] || '').slice(0, 1500), catKw: kwByCat[t.catCode] || [] };
+    return { t: t, tw: String(t.title || '').toLowerCase().split(/[^0-9a-z가-힣]+/).filter(String), title: normStr_(t.title), catName: normStr_(t.catName), desc: normStr_(desc[t.key] || '').slice(0, 1500), catKw: kwByCat[t.catCode] || [] };
   });
 }
 
 function scoreBook_(d, prof) {
-  var s = 0, why = { title: [], desc: [], cat: null, catFrom: '', popular: false };
+  var s = 0, hits = 0, why = { title: [], desc: [], cat: null, catFrom: '', popular: false };
   prof.terms.forEach(function (term) {
     var n = normStr_(term); if (n.length < 2) return;
-    if (CONTEXT_WORDS.indexOf(n) >= 0) { if (d.title.indexOf(n) >= 0) s += 0.5; return; }
-    if (d.title.indexOf(n) >= 0) { s += 4; why.title.push(term); }
-    else if (d.catName.indexOf(n) >= 0) { s += 2.5; why.catFrom = why.catFrom || 'term'; }
-    else if (d.desc.indexOf(n) >= 0) { s += 1.5; why.desc.push(term); }
+    if (CONTEXT_WORDS.indexOf(n) >= 0) { if (d.title.indexOf(n) >= 0) s += 0.3; return; }
+    var mine = prof.userTerms.indexOf(term) >= 0;
+    // 직접 적은 두 글자 말은 낱말 첫머리에서만 인정 ('화를'이 '대화를'에 걸리지 않게)
+    var inTitle = mine && n.length <= 2 ? d.tw.some(function (w) { return w.indexOf(n) === 0; }) : d.title.indexOf(n) >= 0;
+    if (inTitle) { s += 4; hits++; why.title.push(term); }
+    else if (d.catName.indexOf(n) >= 0) { s += 2.5; hits++; why.catFrom = why.catFrom || 'term'; }
+    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5; hits++; why.desc.push(term); }
     else if (d.catKw.indexOf(n) >= 0) { s += 1.5; }
   });
   var c = prof.cats[d.t.catCode] || prof.cats[d.t.group];
   if (c) { s += c.w; why.cat = c; }
+  // 고민이 잡혔는데 그 고민 분야 밖의 책이면, 낱말이 두 개 이상 맞을 때만 추천
+  if (prof.sits.length && !(c && c.from === 'sit') && hits < 2) return null;
   var rel = s;
   if (rel <= 0) return null;
   s += Math.min(Number(d.t.loanCount) || 0, 30) * 0.05;
@@ -1674,7 +1688,8 @@ function profile_(input) {
   var job = JOB_GROUPS.filter(function (j) { return j.id === input.job; })[0] || null;
   var free = String(input.situation || '');
   var sits = situationsFrom_(input.situations, free);
-  var userTerms = terms_(input.keywords).concat(terms_(free).filter(function (t) { return terms_(input.keywords).indexOf(t) < 0; }));
+  var userTerms = terms_(input.keywords).concat(terms_(free).filter(function (t) { return terms_(input.keywords).indexOf(t) < 0; }))
+    .filter(function (t) { return CONTEXT_WORDS.indexOf(normStr_(t)) < 0; });
   var terms = userTerms.slice();
   sits.forEach(function (s) { s.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); }); });
   var cats = {};
@@ -1710,7 +1725,7 @@ function recommend_(input) {
     .filter(function (x) { return x.rel >= 2.5; })
     .sort(function (a, b) { return b.score - a.score; });
   var used = {}, seenSeries = {}, cards = [];
-  function seriesKey(t) { return normTitle_(t.title).slice(0, 6); }
+  function seriesKey(t) { return normTitle_(t.title).replace(/[0-9]+(권|부|편)?$/, '').replace(/(상|하|上|下)$/, '').slice(0, 6); }
   function free(y) { return !used[y.d.t.key] && !seenSeries[seriesKey(y.d.t)]; }
   function take(y) { used[y.d.t.key] = 1; seenSeries[seriesKey(y.d.t)] = 1; }
   for (var i = 0; i < ranked.length && cards.length < 3; i++) {
