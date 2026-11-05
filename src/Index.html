@@ -453,12 +453,16 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   const groupOf = (c) => { c = String(c || ''); return c.length >= 4 ? c.slice(0, -2) + '00' : (c[0] || '') + '00'; };
   const catName = (code) => (state.cat?.groups.find((x) => x.code === String(code)) || {}).name || '';
   const kyobo = (isbn) => `https:\/\/contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/${isbn}.jpg`;
-  window.__coverErr = (img) => { const c = img.closest('.cover'); if (c) c.classList.remove('has-img'); img.remove(); };
+  window.__coverErr = (img) => {
+    // 교보문고 기본 크기 이미지가 없으면 원본 이미지 주소로 한 번 더 시도
+    if (!img.dataset.retry && img.src.indexOf('sih/fit-in/458x0/pdt') > 0) { img.dataset.retry = '1'; img.src = img.src.replace('sih/fit-in/458x0/pdt', 'pdt'); return; }
+    const c = img.closest('.cover'); if (c) c.classList.remove('has-img'); img.remove();
+  };
   window.__coverLoad = (img) => { if (img.naturalWidth < 40) return window.__coverErr(img); img.closest('.cover')?.classList.add('has-img'); };
-  function coverHTML(b, flag = '') {
+  function coverHTML(b, flag = '', eager = false) {
     const src = b.cover || (b.isbn && String(b.isbn).length === 13 ? kyobo(b.isbn) : '');
     const bg = PALETTE[groupOf(b.catCode)] || '#37474f';
-    const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onload="__coverLoad(this)" onerror="__coverErr(this)">` : '';
+    const img = src ? `<img src="${esc(src)}" alt=""${eager ? '' : ' loading="lazy"'} referrerpolicy="no-referrer" onload="__coverLoad(this)" onerror="__coverErr(this)">` : '';
     return `<div class="cover" style="background:${bg}"><div class="gen" aria-hidden="true"><div class="gc">${esc(b.catName || catName(b.catCode))}</div><div class="gt">${esc(b.title)}</div><div class="ga">${esc(String(b.author || '').split(',')[0])}</div></div>${img}${flag}</div>`;
   }
   function availPill(t) {
@@ -602,7 +606,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     const canBorrow = b.available > 0 && (!b.waiting || myRes?.rank === 1);
     const nextDue = b.copies.filter((c) => c.dueDate).map((c) => c.dueDate).sort()[0];
     const owned = b.copies.filter((c) => c.status !== '분실').length;
-    body.innerHTML = `<div class="detail"><div>${coverHTML(b)}</div><div>
+    body.innerHTML = `<div class="detail"><div>${coverHTML(b, '', true)}</div><div>
       <h2>${esc(b.title)}</h2><div class="by">${esc(b.author || '저자 정보 없음')}${b.publisher ? ` · ${esc(b.publisher)}` : ''}</div>
       <div class="row">${b.available ? `<span class="pill ok">지금 대출 가능 (${b.available}/${owned}권)</span>` : '<span class="pill warn">모두 대출 중</span>'}${b.waiting ? `<span class="pill info">예약 ${b.waiting}명</span>` : ''}${!b.available && nextDue ? `<span class="small muted">가장 빠른 반납예정 ${pretty(nextDue)}</span>` : ''}</div>
       <dl class="kv"><dt>분류</dt><dd>${esc(b.groupName)} › ${esc(b.catName)}</dd>
@@ -795,7 +799,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   function recCard(c, i) {
     const cta = c.available > 0 ? '대출 신청' : '상세·예약';
     return `<article class="reccard">
-      <button class="rc-cover" data-key="${esc(c.key)}" aria-label="${esc(c.title)} 상세보기">${coverHTML(c)}</button>
+      <button class="rc-cover" data-key="${esc(c.key)}" aria-label="${esc(c.title)} 상세보기">${coverHTML(c, '', true)}</button>
       <div class="rc-body">
         <div class="rc-no">추천 ${i + 1}</div>
         <h3><button class="linklike" data-key="${esc(c.key)}">${esc(c.title)}</button></h3>
