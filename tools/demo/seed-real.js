@@ -19,7 +19,7 @@
   // 희망도서: 실제 신청 2건 → 구매 투표 진행
   save_('requests', [
     { id: 'req-ga4', createdAt: nowIso_(), title: '모두의 구글 애널리틱스 4', author: '김도연', publisher: '길벗', reason: '', empNo: '29011301', status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' },
-    { id: 'req-ax', createdAt: nowIso_(), title: '인간과 봇이 협력하는 AX경영', author: '', publisher: '', reason: 'AI 해커톤을 계기로 부서마다 AX 전환을 고민하고 있어요. 사람과 AI가 일을 어떻게 나눠 맡을지 함께 읽고 이야기 나누기 좋은 책이라 추천합니다.', empNo: '29011301', status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' }]);
+    { id: 'req-ax', createdAt: nowIso_(), title: '인간과 봇이 협력하는 AX경영', author: '박원우', publisher: '21세기북스', reason: 'AI 해커톤을 계기로 부서마다 AX 전환을 고민하고 있어요. 사람과 AI가 일을 어떻게 나눠 맡을지 함께 읽고 이야기 나누기 좋은 책이라 추천합니다.', empNo: '29011301', status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' }]);
   _tables = {};
   createRound_({ title: today.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표', candidates: ['req-ga4', 'req-ax'], endDate: addDays_(today, 7), maxVotes: 1, buyCount: 1 }, '장유영');
   _tables = {}; _cats = null; _empMap = null;
