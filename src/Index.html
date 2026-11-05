@@ -355,6 +355,33 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
 .rec-leo { width: 200px; max-width: 70%; height: auto; justify-self: center; margin-bottom: 6px; }
 @media (max-width: 600px) { .promo-leo { width: 92px; } }
 
+/* ── 이용안내 ── */
+.g2 { max-width: 920px; margin: 0 auto; display: grid; gap: 16px; }
+.g2-head { background: var(--surface); border-radius: var(--radius-m); box-shadow: var(--shadow); padding: 22px 24px; border-top: 4px solid var(--primary); }
+.g2-head h2 { font-family: var(--display); font-size: 22px; margin: 0 0 14px; }
+.g2-facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.g2-facts div { background: var(--primary-soft); border-radius: var(--radius-s); padding: 12px 14px; display: grid; gap: 2px; }
+.g2-facts b { font-size: 18px; color: var(--primary-strong); }
+.g2-facts span { font-size: 12.5px; color: var(--ink-2); }
+.g2-steps { list-style: none; counter-reset: st; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.g2-steps li { counter-increment: st; display: grid; gap: 6px; align-content: start; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.g2-steps li::before { content: counter(st); width: 26px; height: 26px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.g2-steps li > b { font-size: 15px; }
+.g2 > .panel { margin: 0; }
+.g2-steps span { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+.g2-rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--ink-2); }
+.g2-more { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.g2-card { display: grid; grid-template-columns: 72px 1fr; gap: 14px; align-items: center; background: var(--surface); border-radius: var(--radius-m); box-shadow: var(--shadow); padding: 14px 18px; color: inherit; text-decoration: none; border: 1px solid transparent; }
+.g2-card:hover { border-color: var(--primary); }
+.g2-card img { width: 72px; height: auto; }
+.g2-card b { display: block; font-size: 16px; margin-bottom: 2px; }
+.g2-card span { font-size: 13px; color: var(--ink-2); }
+.g2-ico { width: 56px; height: 56px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-size: 24px; font-weight: 700; justify-self: center; }
+.g2-contact { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.g2-contact h2 { margin: 0 0 4px; }
+.g2-contact p { margin: 0; }
+@media (max-width: 760px) { .g2-facts, .g2-steps { grid-template-columns: 1fr 1fr; } .g2-more { grid-template-columns: 1fr; } }
+
   </style>
 </head>
 <body>
@@ -680,22 +707,43 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   // ─── 이용안내 ─────────────────────────────────────
   function renderGuide() {
     const c = state.config;
-    view.innerHTML = `<div class="guide">
-      <div class="panel"><h2>이용 절차</h2><ol>
-        <li><b>책 찾기</b> — 도서 찾기에서 제목·저자로 검색하고, 책을 눌러 대출 가능 여부를 확인합니다.</li>
-        <li><b>대출 신청</b> — 사번을 입력해 본인 확인 후 [대출 신청하기]를 누릅니다. 도서코드는 자동으로 배정됩니다.</li>
-        <li><b>수령</b> — 신청 다음 영업일 14:00~18:00에 ${esc(c.location)} <b>대출도서 칸</b>에서 가져갑니다.<br><span class="small muted">예) 금요일 신청 → 다음 영업일 14시 이후 수령</span></li>
-        <li><b>반납</b> — ${c.loanDays}일 안에 <b>반납도서 칸</b>에 넣고, 내 대출에서 [반납했어요]를 누릅니다.</li></ol></div>
-      <div class="panel"><h2>유의사항</h2><ul>
-        <li>대출기간은 ${c.loanDays}일(휴무일 포함)이며, 반납예정일이 휴무일이면 다음 영업일까지 자동 연장됩니다.</li>
-        <li>1인 최대 ${c.maxLoansPerUser}권까지 빌릴 수 있습니다.</li>
-        <li>연장은 ${c.maxExtensions}회 ${c.extendDays}일 가능합니다. 더 필요하면 반납 후 다시 신청해 주세요.</li>
-        <li>연체 중에는 새로 대출할 수 없습니다.</li>
-        <li>모두 대출 중인 책은 예약할 수 있으며, 반납되면 메일로 알려드립니다.</li>
-        <li>반납예정일 3일 전과 당일, 연체 시에는 회사 메일로 안내가 발송됩니다.</li>
-        <li>담당자 확인 없이 도서를 반출하지 마세요. 분실 시 실물로 변상합니다.</li></ul></div>
-      <div class="panel"><h2>책 추천 · 희망도서</h2><ul><li><a href="#/recommend">책 추천</a>에서 직무와 고민을 고르면 보유 도서 3권을 추천해 드려요.</li><li>읽고 싶은 책은 <a href="#/wish">희망도서</a>로 신청하세요. 임직원 투표 결과를 신규 도서 구매 심사에 반영하고, 입고되면 메일로 알려드립니다.</li><li>임직원과 나누고 싶은 책 기부도 언제나 환영합니다.</li></ul></div>
-      <div class="panel"><h2>문의</h2><p style="margin:0">${esc(c.managerName)}<br>${esc(c.managerPhone)}${c.managerEmail ? `<br><a href="mailto:${esc(c.managerEmail)}">${esc(c.managerEmail)}</a>` : ''}</p></div></div>`;
+    const mail = c.managerEmail ? `mailto:${encodeURIComponent(c.managerEmail).replace('%40', '@')}?subject=${encodeURIComponent('[오스템문고] 문의')}` : '';
+    view.innerHTML = `<div class="g2">
+      <section class="g2-head">
+        <h2>오스템문고 이용안내</h2>
+        <div class="g2-facts">
+          <div><b>${c.loanDays}일</b><span>대출 기간</span></div>
+          <div><b>${c.maxLoansPerUser}권</b><span>1인 최대</span></div>
+          <div><b>${c.maxExtensions}회 · ${c.extendDays}일</b><span>연장</span></div>
+          <div><b>다음 영업일</b><span>14:00~18:00 수령</span></div>
+        </div>
+      </section>
+      <section class="panel"><h2>이렇게 빌려요</h2>
+        <ol class="g2-steps">
+          <li><b>찾고 신청하기</b><span>책을 고르고 사번을 입력해 [대출 신청]을 누르세요.</span></li>
+          <li><b>받아 가기</b><span>다음 영업일 14:00~18:00, ${esc(c.location)} <b>대출도서 칸</b>에서 가져가세요.</span></li>
+          <li><b>읽고 연장하기</b><span>더 필요하면 [내 대출]에서 반납예정일 전에 연장하세요.</span></li>
+          <li><b>반납하기</b><span><b>반납도서 칸</b>에 넣고 [내 대출]에서 [반납했어요]를 누르세요.</span></li>
+        </ol>
+      </section>
+      <section class="panel"><h2>꼭 알아두세요</h2>
+        <ul class="g2-rules">
+          <li>연체 중에는 새로 빌릴 수 없어요.</li>
+          <li>모두 대출 중인 책은 예약할 수 있고, 반납되면 메일로 알려드려요.</li>
+          <li>반납예정일 3일 전·당일·연체 시 회사 메일로 안내가 가요.</li>
+          <li>반납예정일이 휴무일이면 다음 영업일까지 자동으로 늘어나요.</li>
+          <li>잃어버린 책은 같은 책으로 변상해 주세요.</li>
+        </ul>
+      </section>
+      <div class="g2-more">
+        <a class="g2-card" href="#/recommend"><img src="${LEO}" alt=""><div><b>책 추천</b><span>직무와 고민을 고르면 레오거가 3권을 골라 드려요.</span></div></a>
+        <a class="g2-card" href="#/wish"><div class="g2-ico" aria-hidden="true">✚</div><div><b>희망도서 · 투표</b><span>읽고 싶은 책을 신청하세요. 투표 결과는 구매 심사에 반영해요.</span></div></a>
+      </div>
+      <section class="panel g2-contact"><div><h2>문의</h2><p>${esc(c.managerName)}${c.managerPhone ? ` · ${esc(c.managerPhone)}` : ''}${c.managerEmail ? `<br><span class="small muted">${esc(c.managerEmail)}</span>` : ''}</p></div>
+        ${mail ? `<div class="row"><a class="btn primary" href="${mail}">메일로 문의하기</a><button type="button" class="btn" id="copyMail">주소 복사</button></div>` : ''}</section>
+    </div>`;
+    const cp = $('#copyMail');
+    if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(c.managerEmail); toast('메일 주소를 복사했어요.'); } catch (e) { toast(c.managerEmail); } };
   }
 
   // ─── 접속 팝업: 구매 투표 → 책 추천 (홍보용) ─────
