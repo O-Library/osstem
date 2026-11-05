@@ -795,18 +795,20 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     const m = modal(`<div class="promo">
       <div class="promo-hero"><div><div class="promo-eyebrow">책 추천</div>
       <h2>지금 나에게 필요한 책, 레오거가 골라 드려요</h2></div><img class="promo-leo" src="${LEO}" alt="책 읽는 레오거"></div>
-      <p class="small muted" style="margin:4px 0 14px">직무와 고민만 고르면 오스템문고 보유 도서 중 3권을 추천 이유와 함께 알려드려요. 대출 중이면 바로 빌릴 수 있는 책도 함께요.</p>
+      <p class="small muted" style="margin:4px 0 14px">직무와 고민을 고르거나 적어 주면 오스템문고 보유 도서 중 3권을 추천 이유와 함께 알려드려요. 대출 중이면 바로 빌릴 수 있는 책도 함께요.</p>
       <div class="small" style="font-weight:700;margin-bottom:6px">내 업무 그룹</div>
       <div class="chips">${o.jobs.map((j) => `<button type="button" class="chip" data-pj="${j.id}">${esc(j.name)}</button>`).join('')}</div>
       <div class="small" style="font-weight:700;margin:14px 0 6px">요즘 고민</div>
       <div class="chips">${o.situations.filter((x) => top.includes(x.id)).map((x) => `<button type="button" class="chip" data-ps="${x.id}">${esc(x.label)}</button>`).join('')}</div>
+      <label class="f" style="margin-top:12px">고민을 직접 적어도 돼요<textarea class="in" id="prSit" rows="3" maxlength="200" placeholder="예) 이번에 처음 팀장이 됐는데 팀원들과 대화하는 게 어려워요"></textarea></label>
       <button class="btn primary lg" id="prGo" style="width:100%;margin-top:16px">책 3권 추천받기</button>
       ${promoFoot(false)}</div>`, 'promo-modal');
     $$('[data-pj]', m).forEach((b) => b.onclick = () => { pick.job = pick.job === b.dataset.pj ? '' : b.dataset.pj; $$('[data-pj]', m).forEach((x) => x.classList.toggle('on', x.dataset.pj === pick.job)); });
     $$('[data-ps]', m).forEach((b) => b.onclick = () => { const id = b.dataset.ps; pick.situations = pick.situations.includes(id) ? pick.situations.filter((x) => x !== id) : pick.situations.concat(id); b.classList.toggle('on'); });
     $('#prGo', m).onclick = () => {
-      state.rec = { job: pick.job, situations: pick.situations, situation: '', keywords: '' };
-      state.recAuto = !!(pick.job || pick.situations.length);
+      const sit = $('#prSit', m).value.trim();
+      state.rec = { job: pick.job, situations: pick.situations, situation: sit, keywords: '' };
+      state.recAuto = !!(pick.job || pick.situations.length || sit);
       closeModal(true); location.hash = '#/recommend';
     };
     bindPromoFoot(m);
@@ -824,7 +826,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         <div class="choices" role="radiogroup" aria-label="직무 그룹">${o.jobs.map((j) => `<button type="button" class="choice ${f.job === j.id ? 'on' : ''}" data-job="${j.id}" role="radio" aria-checked="${f.job === j.id}"><b>${esc(j.name)}</b><span>${esc(j.desc)}</span></button>`).join('')}</div>
         <h3 class="step"><span>2</span>요즘 고민 <em>여러 개 골라도 돼요</em></h3>
         <div class="chips">${o.situations.map((x) => `<button type="button" class="chip ${f.situations.includes(x.id) ? 'on' : ''}" data-sit="${x.id}" aria-pressed="${f.situations.includes(x.id)}">${esc(x.label)}</button>`).join('')}</div>
-        <label class="f" style="margin-top:12px">직접 적어도 돼요<input class="in" id="recSit" value="${esc(f.situation)}" placeholder="예) 첫 팀장 됐어요, 보고서 잘 쓰고 싶어요" maxlength="100"></label>
+        <label class="f" style="margin-top:12px">고민을 직접 적어도 돼요<textarea class="in" id="recSit" rows="3" maxlength="200" placeholder="예) 이번에 처음 팀장이 됐는데 팀원들과 대화하는 게 어려워요">${esc(f.situation)}</textarea></label>
         <h3 class="step"><span>3</span>관심 키워드</h3>
         <input class="in" id="recKw" value="${esc(f.keywords)}" placeholder="예) 협상, 엑셀, 리더십" maxlength="80">
         <button class="btn primary lg" id="recGo" style="width:100%;margin-top:18px">책 3권 추천받기</button>
