@@ -70,7 +70,7 @@ window.__CATS = [["소분류","분류상세"],["100","경영/경제"],["101","CS
   };
   window.google = { script: { run: new Runner() } };
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
-  var KEY = 'osstem-demo-v6';
+  var KEY = 'osstem-demo-v7';
   window.__demoSave = function () {
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };
@@ -1728,7 +1728,7 @@ function recommendOptions_() {
 // 희망도서 신청 → 구매 투표 → 구매확정 → 입고 시 신청자 알림
 //  · 신청·투표는 사번으로 본인 확인(중복 투표 방지·입고 알림용). 화면에는 신청자를 공개하지 않음
 // ─────────────────────────────────────────────────────
-var REQ_OPEN = ['접수', '투표중', '구매확정'];
+var REQ_OPEN = ['접수', '투표중', '투표완료', '구매확정'];
 var MAX_OPEN_REQUESTS_PER_PERSON = 5;
 
 function ownedMatch_(title, author) {
@@ -1836,7 +1836,7 @@ function adminWish_() {
 function updateRequest_(id, patch) {
   var r = rows_('requests').filter(function (x) { return x.id === id; })[0];
   if (!r) throw new AppError('신청 정보를 찾을 수 없습니다.');
-  if (patch.status && ['접수', '투표중', '구매확정', '구매완료', '반려', '보유중'].indexOf(patch.status) < 0) throw new AppError('알 수 없는 상태입니다.');
+  if (patch.status && ['접수', '투표중', '투표완료', '구매확정', '구매완료', '반려', '보유중'].indexOf(patch.status) < 0) throw new AppError('알 수 없는 상태입니다.');
   ['status', 'adminMemo', 'title', 'author', 'publisher'].forEach(function (k) { if (patch[k] !== undefined) r[k] = String(patch[k]); });
   if (patch.status) r.decidedAt = nowIso_();
   save_('requests', r);
@@ -1850,7 +1850,7 @@ function createRound_(input, admin) {
   var start = input.startDate || today_(), end = input.endDate || addDays_(start, 7);
   if (end < start) throw new AppError('마감일이 시작일보다 빠릅니다.');
   var r = { id: uid_(), title: String(input.title || '').trim() || (start.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표'), startDate: start, endDate: end,
-    maxVotes: Math.max(1, Math.min(10, Number(input.maxVotes) || 3)), buyCount: Math.max(1, Number(input.buyCount) || 5), candidates: ids.filter(function (id) { return reqs.some(function (x) { return x.id === id; }); }),
+    maxVotes: Math.max(1, Math.min(10, Number(input.maxVotes) || 1)), buyCount: Number(input.buyCount) || 0, candidates: ids.filter(function (id) { return reqs.some(function (x) { return x.id === id; }); }),
     status: '진행', createdAt: nowIso_(), createdBy: admin || '', result: null };
   save_('rounds', r);
   reqs.forEach(function (x) { x.status = '투표중'; x.roundId = r.id; x.votes = 0; });
@@ -1863,10 +1863,10 @@ function closeRound_(id) {
   var counts = tally_(r.id);
   var reqs = rows_('requests').filter(function (x) { return (r.candidates || []).indexOf(x.id) >= 0; });
   reqs.sort(function (a, b) { return (counts[b.id] || 0) - (counts[a.id] || 0) || String(a.createdAt).localeCompare(String(b.createdAt)); });
-  var n = Number(r.buyCount) || 0;
-  reqs.forEach(function (x, i) {
+  // 투표 결과는 구매 심사 참고용: 자동으로 구매확정하지 않고 '투표완료'로 둔다
+  reqs.forEach(function (x) {
     x.votes = counts[x.id] || 0;
-    if (x.status === '투표중') { x.status = i < n && x.votes > 0 ? '구매확정' : '접수'; x.decidedAt = nowIso_(); }
+    if (x.status === '투표중') { x.status = '투표완료'; x.decidedAt = nowIso_(); }
   });
   save_('requests', reqs);
   r.status = '마감';
