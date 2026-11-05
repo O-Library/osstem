@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>오스템문고 관리자</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d9480f'/%3E%3Cpath d='M8 9h7a3 3 0 0 1 3 3v12a3 3 0 0 0-3-3H8zM24 9h-5a3 3 0 0 0-1 .2V24a3 3 0 0 1 2-1h4z' fill='%23fff'/%3E%3C/svg%3E">
+  <meta name="robots" content="noindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square.css" rel="stylesheet">
+  <style>
+
+:root {
+  /* 주황색 기반 테마 */
+  --bg: #fbf6f1;
+  --surface: #ffffff;
+  --ink: #2b2118;
+  --ink-2: #5b4c40;
+  --ink-3: #8c7c70;
+  --line: #ecdfd4;
+  --primary: #d9480f;
+  --primary-strong: #b93d0c;
+  --primary-ink: #ffffff;
+  --primary-soft: #fff0e5;
+  --head: #e8590c;
+  --head-2: #d9480f;
+  --ok: #1d7a4b;
+  --ok-soft: #e3f3ea;
+  --warn: #9a6400;
+  --warn-soft: #fdf3d8;
+  --bad: #c0392b;
+  --bad-soft: #fde8e5;
+  --info: #2a5ea8;
+  --info-soft: #e7effa;
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --shadow: 0 1px 2px rgba(80, 40, 10, .06), 0 6px 20px rgba(80, 40, 10, .07);
+  --font: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  --display: 'NanumSquare', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font); -webkit-font-smoothing: antialiased; word-break: keep-all; }
+a { color: var(--primary); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; letter-spacing: -.01em; }
+.muted { color: var(--ink-3); }
+.small { font-size: 13px; }
+.hidden { display: none !important; }
+
+/* ── 상단 ───────────────────────── */
+.top { background: var(--head-2); color: #fff; }
+.top-inner { max-width: 1240px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 20px; }
+.brand { display: flex; align-items: baseline; gap: 10px; color: #fff; text-decoration: none; white-space: nowrap; }
+.brand b { font-size: 19px; font-weight: 800; }
+.brand span { font-size: 13px; color: #ffe1cc; }
+.top nav { margin-left: auto; display: flex; gap: 4px; }
+.top nav a { color: #fff3ea; text-decoration: none; padding: 7px 12px; border-radius: var(--radius-s); font-size: 14px; position: relative; }
+.top nav a.on, .top nav a:hover { color: #fff; background: rgba(255,255,255,.2); }
+.top nav a.on { font-weight: 700; }
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; height: 18px; line-height: 18px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 700; text-align: center; margin-left: 4px; }
+
+.search-band { background: linear-gradient(180deg, var(--head-2), var(--head)); padding: 6px 20px 28px; }
+.search-wrap { max-width: 1240px; margin: 0 auto; }
+.search { display: flex; background: #fff; border-radius: var(--radius-m); overflow: hidden; box-shadow: 0 8px 28px rgba(120,40,0,.28); }
+.search input { flex: 1; border: 0; padding: 16px 18px; font-size: 17px; outline: none; min-width: 0; }
+.search select { border: 0; border-left: 1px solid var(--line); padding: 0 12px; background: #fff; color: var(--ink-2); }
+.search-hint { color: #fff0e5; font-size: 13px; margin-top: 10px; }
+
+.alerts { max-width: 1240px; margin: 16px auto 0; padding: 0 20px; display: grid; gap: 8px; }
+.alert { display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-radius: var(--radius-s); font-size: 14px; border-left: 4px solid; }
+.alert.danger { background: var(--bad-soft); border-color: var(--bad); color: #7a1f19; }
+.alert.warn { background: var(--warn-soft); border-color: var(--warn); color: #6e430a; }
+.alert.info { background: var(--info-soft); border-color: var(--info); color: #1d4479; }
+.alert.success { background: var(--ok-soft); border-color: var(--ok); color: #155c38; }
+.alert .act { margin-left: auto; white-space: nowrap; }
+
+main { max-width: 1240px; margin: 0 auto; padding: 20px 20px 80px; }
+
+/* ── 버튼/폼 ────────────────────── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); padding: 8px 14px; border-radius: var(--radius-s); cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.btn.primary:hover { background: var(--primary-strong); border-color: var(--primary-strong); }
+.btn.danger { color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.lg { padding: 12px 20px; font-size: 15px; }
+.btn.sm { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.in { border: 1px solid var(--line); background: #fff; border-radius: var(--radius-s); padding: 9px 11px; width: 100%; font-size: 15px; font-weight: 400; color: var(--ink); }
+.in:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+
+/* ── 카탈로그 ───────────────────── */
+.catalog { display: grid; grid-template-columns: 210px 1fr; gap: 28px; }
+.cats { position: sticky; top: 16px; align-self: start; }
+.cats h3 { font-size: 13px; color: var(--ink-3); font-weight: 600; margin: 0 0 8px 10px; }
+.cats button { display: flex; width: 100%; justify-content: space-between; border: 0; background: none; padding: 7px 10px; border-radius: var(--radius-s); cursor: pointer; text-align: left; font-size: 14px; color: var(--ink-2); }
+.cats button:hover { background: rgba(217,72,15,.07); }
+.cats button.on { background: var(--surface); color: var(--primary); font-weight: 700; box-shadow: var(--shadow); }
+.cats button .n { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+.cats .sub { margin: 2px 0 6px 12px; border-left: 1px solid var(--line); padding-left: 4px; }
+.cats .sub button { font-size: 13px; padding: 5px 8px; }
+
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.toolbar h2 { font-size: 20px; font-weight: 800; }
+.toolbar .count { color: var(--ink-3); font-size: 14px; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 2px; }
+.seg button { border: 0; background: none; padding: 5px 10px; border-radius: 4px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.seg button.on { background: var(--primary); color: #fff; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--ink-2); cursor: pointer; }
+
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 28px 20px; }
+.book { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: grid; gap: 10px; align-content: start; }
+.cover { aspect-ratio: 2/3; border-radius: 3px 8px 8px 3px; overflow: hidden; position: relative; box-shadow: inset 4px 0 0 rgba(0,0,0,.18), 0 2px 4px rgba(23,36,44,.12), 0 10px 20px -8px rgba(23,36,44,.3); transition: transform .18s ease; background: #ccc; }
+.book:hover .cover, .book:focus-visible .cover { transform: translateY(-4px); }
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gen { position: absolute; inset: 0; padding: 16px 14px 14px 18px; display: flex; flex-direction: column; color: #fff; }
+.gen .gt { font-weight: 800; font-size: 16px; line-height: 1.3; letter-spacing: -.02em; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.gen .ga { margin-top: auto; font-size: 12px; opacity: .85; }
+.gen .gc { font-size: 11px; opacity: .7; margin-bottom: 10px; }
+.gen::after { content: ''; position: absolute; left: 0; right: 0; bottom: 34%; height: 2px; background: rgba(255,255,255,.35); }
+.flag { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #fff; color: var(--ink); }
+.meta .t { font-weight: 700; font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.meta .a { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+.pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.info { background: var(--info-soft); color: var(--info); }
+.pill.mute { background: #f1ebe6; color: var(--ink-3); }
+.empty { text-align: center; padding: 60px 20px; color: var(--ink-3); }
+.more { display: flex; justify-content: center; margin-top: 32px; }
+
+/* ── 모달 ───────────────────────── */
+.scrim { position: fixed; inset: 0; background: rgba(15, 24, 30, .5); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 50; overflow-y: auto; animation: fade .15s; }
+.modal { background: var(--surface); border-radius: var(--radius-m); width: 100%; max-width: 760px; box-shadow: 0 30px 80px rgba(0,0,0,.35); position: relative; animation: rise .2s ease; }
+.modal.narrow { max-width: 460px; }
+.modal .x { position: absolute; top: 10px; right: 10px; border: 0; background: none; font-size: 22px; cursor: pointer; color: var(--ink-3); width: 36px; height: 36px; border-radius: 50%; }
+.modal .x:hover { background: #f0f2f2; }
+.mbody { padding: 28px; }
+.detail { display: grid; grid-template-columns: 200px 1fr; gap: 28px; }
+.detail .cover { width: 200px; }
+.detail h2 { font-size: 24px; font-weight: 800; line-height: 1.3; padding-right: 30px; }
+.detail .by { color: var(--ink-2); margin: 6px 0 14px; }
+.kv { display: grid; grid-template-columns: 76px 1fr; gap: 4px 12px; font-size: 14px; margin: 14px 0; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; }
+.desc { font-size: 14px; color: var(--ink-2); line-height: 1.75; max-height: 190px; overflow: auto; margin: 14px 0; white-space: pre-line; }
+.copies { display: flex; flex-wrap: wrap; gap: 6px; }
+.copy { font-size: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 4px 8px; display: inline-flex; gap: 6px; align-items: center; }
+.apply { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; }
+.apply h3 { font-size: 16px; margin-bottom: 4px; }
+.steps { margin: 0; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
+.done { text-align: center; padding: 10px 0; }
+.done .big { font-size: 22px; font-weight: 800; margin: 10px 0 6px; }
+.ticket { background: var(--primary-soft); border-radius: var(--radius-m); padding: 16px 20px; text-align: left; margin: 18px 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; }
+.ticket dt { color: var(--ink-2); }
+.ticket dd { margin: 0; font-weight: 700; }
+
+/* ── 내 대출 ────────────────────── */
+.panel { background: var(--surface); border-radius: var(--radius-m); box-shadow: var(--shadow); padding: 22px; }
+.panel + .panel { margin-top: 16px; }
+.panel h2 { font-size: 17px; font-weight: 800; margin-bottom: 14px; }
+.loanrow { display: grid; grid-template-columns: 52px 1fr auto; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
+.loanrow:first-of-type { border-top: 0; }
+.loanrow .cover { width: 52px; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.loanrow .cover .gen { padding: 4px; }
+.loanrow .cover .gen .gt { font-size: 7px; }
+.loanrow .cover .gen .ga, .loanrow .cover .gen .gc, .loanrow .cover .gen::after { display: none; }
+.dday { font-size: 13px; font-weight: 700; }
+.idbox { max-width: 520px; margin: 40px auto; }
+
+/* ── 이용안내 ───────────────────── */
+.guide { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+.guide ol { padding-left: 20px; margin: 0; display: grid; gap: 10px; }
+.guide ul { padding-left: 18px; margin: 0; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+
+/* ── 관리자 ─────────────────────── */
+.admin { display: grid; grid-template-columns: 200px 1fr; gap: 24px; }
+.side { position: sticky; top: 16px; align-self: start; display: grid; gap: 2px; }
+.side a { padding: 9px 12px; border-radius: var(--radius-s); color: var(--ink-2); text-decoration: none; font-size: 14px; display: flex; justify-content: space-between; }
+.side a.on { background: var(--surface); color: var(--primary); font-weight: 700; box-shadow: var(--shadow); }
+.side a:hover:not(.on) { background: rgba(217,72,15,.07); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { background: var(--surface); border-radius: var(--radius-m); padding: 16px 18px; box-shadow: var(--shadow); border-top: 3px solid var(--primary); }
+.stat b { display: block; font-size: 28px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 13px; color: var(--ink-2); }
+.stat.bad { border-top-color: var(--bad); } .stat.bad b { color: var(--bad); }
+.stat.warn { border-top-color: var(--warn); }
+.stat.info { border-top-color: var(--info); }
+.cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.t th { text-align: left; font-size: 12px; color: var(--ink-3); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.t td { padding: 9px 8px; border-bottom: 1px solid #f3ebe4; vertical-align: middle; }
+table.t tr:hover td { background: #fffaf6; }
+.tw { overflow-x: auto; }
+.code { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.mailstate { display: flex; gap: 12px; align-items: center; padding: 14px 18px; border-radius: var(--radius-m); margin-bottom: 16px; font-size: 14px; }
+
+.reg { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.cand { display: grid; grid-template-columns: 44px 1fr; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-s); cursor: pointer; background: #fff; text-align: left; width: 100%; }
+.cand:hover { border-color: var(--ink-3); }
+.cand.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.cand img, .cand .noimg { width: 44px; height: 64px; object-fit: cover; border-radius: 2px; background: #e8ecec; }
+.cls { display: grid; gap: 8px; }
+.clsopt { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-s); cursor: pointer; background: #fff; text-align: left; width: 100%; }
+.clsopt.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.clsopt .why { font-size: 12px; color: var(--ink-3); }
+.bigcode { font-size: 30px; font-weight: 800; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--primary); }
+.bar { height: 6px; background: #f3e7dd; border-radius: 3px; overflow: hidden; width: 64px; }
+.bar i { display: block; height: 100%; background: var(--primary); }
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 10px; }
+.chart .c { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.chart .c i { width: 100%; max-width: 28px; background: var(--primary); border-radius: 3px 3px 0 0; min-height: 2px; }
+.chart .c span { font-size: 11px; color: var(--ink-3); }
+.chart .c b { font-size: 11px; color: var(--ink-2); }
+
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 12px 20px; border-radius: var(--radius-s); z-index: 99; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.3); animation: rise .2s; max-width: calc(100% - 32px); }
+.toast.err { background: var(--bad); }
+
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+@media (max-width: 900px) {
+  .catalog, .admin, .guide, .cols2, .reg { grid-template-columns: 1fr; }
+  .cats { position: static; display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .cats h3, .cats .sub { display: none; }
+  .cats button { width: auto; white-space: nowrap; background: var(--surface); }
+  .cats button .n { margin-left: 6px; }
+  .side { position: static; display: flex; overflow-x: auto; }
+  .side a { white-space: nowrap; }
+  .detail { grid-template-columns: 1fr; }
+  .detail .cover { width: 150px; }
+}
+@media (max-width: 600px) {
+  .top-inner { padding: 12px 16px; gap: 10px; }
+  .brand span { display: none; }
+  .search-band { padding: 4px 16px 20px; }
+  main, .alerts { padding-left: 16px; padding-right: 16px; }
+  .shelf { grid-template-columns: repeat(2, 1fr); gap: 22px 14px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .search select { display: none; }
+  .mbody { padding: 22px 18px; }
+  .loanrow { grid-template-columns: 44px 1fr; }
+  .loanrow > :last-child { grid-column: 1 / -1; }
+}
+.cols2 > .panel, .guide > .panel, .reg > .panel { margin-top: 0; }
+.catalog > *, .admin > *, .book, .meta { min-width: 0; }
+.top nav a { white-space: nowrap; }
+@media (max-width: 600px) {
+  .top nav { gap: 0; }
+  .top nav a { padding: 6px 8px; font-size: 13px; }
+  .brand b { font-size: 17px; }
+}
+
+h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .bigcode, .done .big, .panel h2 { font-family: var(--display); }
+.gen .gt { font-weight: 800; }
+.cover img { position: absolute; inset: 0; background: #fff; }
+.cover.has-img { background: #f3f4f4 !important; }
+.empbox { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+.whoami { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-s); background: var(--primary-soft); font-size: 14px; }
+.whoami.err { background: var(--bad-soft); color: #7a1f19; }
+.loading { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--primary), transparent); background-size: 50% 100%; animation: slide 1s linear infinite; z-index: 100; }
+@keyframes slide { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+
+/* ── 책 추천 ───────────────────── */
+.rec { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 20px; align-items: start; }
+.rec-form { position: sticky; top: 16px; }
+.rec-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.rec-head h2 { margin: 0; }
+.rec-note { margin: 8px 0 4px; }
+.step { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 20px 0 10px; }
+.step span { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; display: inline-grid; place-items: center; }
+.step em { font-style: normal; font-weight: 400; font-size: 12px; color: var(--ink-3); }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choice { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: var(--radius-s); padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; }
+.choice b { font-size: 14px; }
+.choice span { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
+.choice:hover { border-color: var(--primary); }
+.choice.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: 0 0 0 2px rgba(217,72,15,.18); }
+.choice.on b { color: var(--primary-strong); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: #fff; border-radius: 20px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.chip:hover { border-color: var(--primary); }
+.chip.on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+.rec-out { min-height: 300px; }
+.rec-empty { background: var(--surface); border: 2px dashed var(--line); border-radius: var(--radius-m); padding: 60px 24px; text-align: center; display: grid; gap: 8px; color: var(--ink-3); }
+.rec-empty b { color: var(--ink); font-size: 17px; font-family: var(--display); }
+.rec-told { margin: 0 0 12px; }
+.reclist { display: grid; gap: 14px; }
+.reccard { background: var(--surface); border-radius: var(--radius-m); box-shadow: var(--shadow); padding: 18px; display: grid; grid-template-columns: 112px 1fr; gap: 18px; border-left: 4px solid var(--primary); }
+.rc-cover { border: 0; background: none; padding: 0; cursor: pointer; }
+.rc-cover .cover { width: 112px; }
+.rc-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rc-no { font-size: 12px; font-weight: 700; color: var(--primary); letter-spacing: .02em; }
+.rc-body h3 { font-size: 18px; line-height: 1.35; }
+.linklike { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.linklike:hover { color: var(--primary); }
+.rc-why { margin: 4px 0; font-size: 14px; color: var(--ink-2); background: var(--primary-soft); border-radius: var(--radius-s); padding: 10px 12px; }
+.rc-why b { color: var(--primary-strong); margin-right: 8px; font-size: 12px; }
+.rc-alt { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 10px; display: grid; gap: 6px; }
+.altbook { border: 1px solid var(--line); background: #fff; border-radius: var(--radius-s); padding: 8px 10px; text-align: left; cursor: pointer; display: grid; gap: 2px; }
+.altbook:hover { border-color: var(--primary); }
+.rec-gap { margin-top: 14px; border-left: 4px solid var(--warn); }
+
+/* ── 희망도서 · 투표 ───────────── */
+.vote { border-top: 4px solid var(--primary); }
+.cands { display: grid; gap: 8px; }
+.cand2 { display: grid; grid-template-columns: auto 1fr 120px; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 10px 12px; cursor: pointer; background: #fff; }
+.cand2:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.cand2 input { width: 18px; height: 18px; accent-color: var(--primary); }
+.cand2 .cnt { display: grid; gap: 4px; justify-items: end; font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.cand2 .bar { width: 100%; }
+.reqlist { display: grid; }
+.req { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.req:first-child { border-top: 0; }
+.hbar { display: grid; grid-template-columns: 150px 1fr 40px; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; }
+.hbar .bar { width: 100%; height: 10px; }
+.hbar b { text-align: right; }
+@media (max-width: 900px) { .rec { grid-template-columns: 1fr; } .rec-form { position: static; } }
+@media (max-width: 600px) {
+  .top-inner { flex-wrap: wrap; row-gap: 6px; }
+  .top nav { margin-left: 0; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .reccard { grid-template-columns: 84px 1fr; gap: 12px; padding: 14px; }
+  .rc-cover .cover { width: 84px; }
+  .cand2 { grid-template-columns: auto 1fr; }
+  .cand2 .cnt { grid-column: 2; justify-items: start; }
+  .hbar { grid-template-columns: 110px 1fr 32px; }
+}
+
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading hidden" aria-hidden="true"></div>
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="#/"><b id="libName">오스템문고</b><span>사내 도서 대출</span></a>
+      <nav id="topnav">
+        <a href="#/" data-nav="home">도서 찾기</a>
+        <a href="#/recommend" data-nav="recommend">책 추천</a>
+        <a href="#/wish" data-nav="wish">희망도서</a>
+        <a href="#/me" data-nav="me">내 대출<span id="meBadge"></span></a>
+        <a href="#/guide" data-nav="guide">이용안내</a>
+        <a href="#/admin" data-nav="admin" class="nav-admin">관리</a>
+      </nav>
+    </div>
+  </header>
+  <div id="searchBand" class="search-band">
+    <div class="search-wrap">
+      <form class="search" id="searchForm" role="search">
+        <input id="q" type="search" placeholder="책 제목, 저자, 출판사, 도서코드로 검색" autocomplete="off" aria-label="도서 검색">
+        <select id="sort" aria-label="정렬">
+          <option value="new">최근 등록순</option><option value="popular">많이 읽은 순</option><option value="title">제목순</option><option value="code">도서코드순</option>
+        </select>
+      </form>
+      <div class="search-hint" id="hint"></div>
+    </div>
+  </div>
+  <div class="alerts" id="alerts"></div>
+  <main id="view"></main>
+  <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
+  <script src="config.js"></script>
+  <script>window.APP_MODE = 'admin';</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js"><\/script>');</script>
+  <script>var BOOT = {};</script>
+  <script>
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const view = $('#view');
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} } };
+  const sstore = { get: (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} } };
+  // 화면 구분: all = Apps Script 통합 화면, user = 사용자 페이지, admin = 관리자 페이지
+  const MODE = window.APP_MODE || 'all';
+  if (MODE === 'user') { const a = $('#topnav .nav-admin'); if (a) a.remove(); }
+  if (MODE === 'admin') {
+    $('#topnav').innerHTML = `<a href="#/admin" data-nav="admin">관리</a><a href="${window.USER_URL || './'}" target="_blank" rel="noopener">사용자 화면 ↗</a>`;
+    $('.brand span').textContent = '관리자';
+    document.title = '오스템문고 관리자';
+  }
+  const state = { config: null, cat: null, empNo: store.get('lib.emp') || '', myData: null, token: sstore.get('lib.adm') || '', f: { q: '', group: '', cat: '', avail: false, sort: 'new', shown: 48 } };
+
+  // ─── 서버 호출 ──────────────────────────────────────
+  let pending = 0;
+  function api(name, ...args) {
+    pending++; $('#loading').classList.remove('hidden');
+    return new Promise((resolve, reject) => {
+      const done = () => { if (--pending <= 0) { pending = 0; $('#loading').classList.add('hidden'); } };
+      const ok = (s) => { done(); let r; try { r = typeof s === 'string' ? JSON.parse(s) : s; if (!r) throw new Error('빈 응답 (' + typeof s + ')'); } catch (err) { reject(new Error('응답 처리 오류[' + name + ']: ' + err.message)); return; } if (r.ok) resolve(r.data); else { if (r.auth) { state.token = ''; sstore.set('lib.adm', null); } const e = new Error(r.error); e.auth = r.auth; reject(e); } };
+      const fail = () => { done(); reject(new Error('서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.')); };
+      if (window.google && google.script && google.script.run) google.script.run.withSuccessHandler(ok).withFailureHandler(fail).rpc(name, args, state.token);
+      else fetch(window.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ name, args, token: state.token }) }).then((r) => r.text()).then(ok, fail);
+    });
+  }
+  function toast(msg, err = false) {
+    $$('.toast').forEach((t) => t.remove());
+    const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.setAttribute('role', 'status'); t.textContent = msg;
+    document.body.appendChild(t); setTimeout(() => t.remove(), 3400);
+  }
+  const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  const pretty = (d) => { if (!d) return ''; const [y, m, dd] = d.split('-').map(Number); return `${y}년 ${m}월 ${dd}일(${DOW[new Date(y, m - 1, dd).getDay()]})`; };
+  const teamCell = (l) => esc(l.team || '') + (l.teamAtLoan ? ` <span title="대출 당시 소속">(당시 ${esc(l.teamAtLoan)})</span>` : '');
+  const short = (d) => (d ? String(d).slice(0, 10).replace(/-/g, '.') : '');
+
+  function modal(html, cls = '') {
+    closeModal();
+    const s = document.createElement('div'); s.className = 'scrim';
+    s.innerHTML = `<div class="modal ${cls}" role="dialog" aria-modal="true"><button class="x" aria-label="닫기">×</button><div class="mbody">${html}</div></div>`;
+    s.addEventListener('mousedown', (e) => { if (e.target === s) closeModal(); });
+    $('.x', s).onclick = closeModal;
+    document.body.appendChild(s); document.body.style.overflow = 'hidden';
+    return $('.mbody', s);
+  }
+  function closeModal() { $$('.scrim').forEach((s) => s.remove()); document.body.style.overflow = ''; }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+  // ─── 표지 ─────────────────────────────────────────
+  const PALETTE = { 100: '#1f4e5f', 200: '#a8660f', 300: '#6b3f2a', 400: '#3e4a7a', 500: '#2d6a8a', 600: '#7a2f45', 700: '#9a4f6a', 800: '#1d6b56', 900: '#5b5470', 1000: '#4a5d23', 1100: '#253b6e', 1200: '#3f7f6e', 1300: '#4b5563', 1400: '#6b5b2a', 1500: '#b0573a' };
+  const groupOf = (c) => { c = String(c || ''); return c.length >= 4 ? c.slice(0, -2) + '00' : (c[0] || '') + '00'; };
+  const catName = (code) => (state.cat?.groups.find((x) => x.code === String(code)) || {}).name || '';
+  const kyobo = (isbn) => `https:\/\/contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/${isbn}.jpg`;
+  window.__coverErr = (img) => { const c = img.closest('.cover'); if (c) c.classList.remove('has-img'); img.remove(); };
+  window.__coverLoad = (img) => { if (img.naturalWidth < 40) return window.__coverErr(img); img.closest('.cover')?.classList.add('has-img'); };
+  function coverHTML(b, flag = '') {
+    const src = b.cover || (b.isbn && String(b.isbn).length === 13 ? kyobo(b.isbn) : '');
+    const bg = PALETTE[groupOf(b.catCode)] || '#37474f';
+    const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onload="__coverLoad(this)" onerror="__coverErr(this)">` : '';
+    return `<div class="cover" style="background:${bg}"><div class="gen" aria-hidden="true"><div class="gc">${esc(b.catName || catName(b.catCode))}</div><div class="gt">${esc(b.title)}</div><div class="ga">${esc(String(b.author || '').split(',')[0])}</div></div>${img}${flag}</div>`;
+  }
+  function availPill(t) {
+    if (t.available > 0) return `<span class="pill ok">대출가능${t.copies > 1 ? ` ${t.available}/${t.copies}` : ''}</span>`;
+    return `<span class="pill warn">대출중${t.earliestDue ? ` · ${short(t.earliestDue)} 반납예정` : ''}</span>`;
+  }
+  function loanPill(l) {
+    if (l.overdue) return `<span class="pill bad">연체 ${l.overdueDays}일</span>`;
+    if (l.status === 'returning') return '<span class="pill info">반납확인중</span>';
+    if (l.status === 'returned') return '<span class="pill mute">반납완료</span>';
+    if (l.status === 'cancelled') return '<span class="pill mute">취소</span>';
+    if (l.status === 'lost') return '<span class="pill bad">분실</span>';
+    if (l.waitingPickup) return '<span class="pill info">수령대기</span>';
+    if (l.dday <= 3) return `<span class="pill warn">${l.dday === 0 ? '오늘 반납' : `D-${l.dday}`}</span>`;
+    return `<span class="pill ok">대출중 · D-${l.dday}</span>`;
+  }
+
+  // ─── 내 정보 / 알림 ───────────────────────────────
+  async function refreshMe() {
+    if (!state.empNo) { state.myData = null; return renderAlerts(); }
+    try { state.myData = await api('me', state.empNo); } catch (e) { state.myData = null; }
+    renderAlerts();
+  }
+  function renderAlerts() {
+    const alerts = state.myData?.alerts || [];
+    const urgent = alerts.filter((a) => a.level !== 'info').length;
+    const mb = $('#meBadge'); if (mb) mb.innerHTML = urgent ? `<span class="badge">${urgent}</span>` : '';
+    const route = location.hash.replace(/^#\/?/, '').split('/')[0];
+    const notice = state.config?.notice ? [{ level: 'info', text: state.config.notice, notice: true }] : [];
+    const show = route === '' || route === 'me' ? notice.concat(alerts) : route === 'admin' ? [] : notice;
+    $('#alerts').innerHTML = show.map((a) => `<div class="alert ${a.level}"><span>${esc(a.text)}</span>${!a.notice && route !== 'me' ? '<a class="act" href="#/me">내 대출 보기</a>' : ''}</div>`).join('');
+  }
+
+  // ─── 라우터 ───────────────────────────────────────
+  async function router() {
+    const parts = location.hash.replace(/^#\/?/, '').split('/');
+    const r = parts[0] || (MODE === 'admin' ? 'admin' : '');
+    $$('.top nav a').forEach((a) => a.classList.toggle('on', a.dataset.nav === (r || 'home')));
+    $('#searchBand').classList.toggle('hidden', r !== '');
+    renderAlerts(); closeModal(); window.scrollTo(0, 0);
+    try {
+      if (r === '') return await renderCatalog();
+      if (MODE === 'admin' && r !== 'admin') { location.hash = '#/admin'; return; }
+      if (MODE === 'user' && r === 'admin') { location.hash = '#/'; return; }
+      if (r === 'me') return await renderMe();
+      if (r === 'recommend') return await renderRecommend();
+      if (r === 'wish') return await renderWish();
+      if (r === 'guide') return renderGuide();
+      if (r === 'admin') return await renderAdmin(parts[1] || 'dashboard', parts[2]);
+    } catch (e) { view.innerHTML = `<div class="panel">${esc(e.message)}</div>`; return; }
+    location.hash = '#/';
+  }
+
+  // ─── 카탈로그 (브라우저에서 즉시 검색) ─────────────
+  let qt;
+  $('#q').addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(() => { state.f.q = $('#q').value.trim(); state.f.shown = 48; drawCatalog(); }, 120); });
+  $('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); state.f.q = $('#q').value.trim(); drawCatalog(); });
+  $('#sort').addEventListener('change', () => { state.f.sort = $('#sort').value; drawCatalog(); });
+
+  async function loadCatalog(force) { if (!state.cat || force) state.cat = await api('catalog'); return state.cat; }
+  async function renderCatalog() {
+    view.innerHTML = '<div class="catalog"><aside class="cats" id="cats" aria-label="분류"></aside><section><div class="toolbar" id="tb"></div><div class="shelf" id="shelf"></div><div class="more" id="more"></div></section></div>';
+    if (!state.cat) $('#shelf').innerHTML = '<div class="empty" style="grid-column:1/-1">도서 목록을 불러오는 중…</div>';
+    await loadCatalog();
+    drawCatalog();
+  }
+  // 검색어는 개인정보 없이 키워드로만 남겨 '보유하지 않은 주제' 집계에 사용
+  let logT, lastLogged = '';
+  function logQuery(q, n) {
+    clearTimeout(logT);
+    if (!q || q.length < 2 || q === lastLogged) return;
+    logT = setTimeout(() => { lastLogged = q; api('logSearch', q, n).catch(() => {}); }, 2500);
+  }
+  function filtered(ignoreCat) {
+    const f = state.f;
+    let list = state.cat.items;
+    if (f.q) {
+      const terms = f.q.toLowerCase().split(/\s+/).filter(Boolean);
+      list = list.filter((t) => { const h = `${t.title} ${t.author} ${t.publisher} ${t.codes.join(' ')} ${t.isbn} ${t.catName}`.toLowerCase(); const hn = h.replace(/\s/g, ''); return terms.every((x) => h.includes(x) || hn.includes(x)); });
+    }
+    if (f.avail) list = list.filter((t) => t.available > 0);
+    if (!ignoreCat) { if (f.group) list = list.filter((t) => t.group === f.group); if (f.cat) list = list.filter((t) => t.catCode === f.cat); }
+    return list;
+  }
+  function drawCatalog() {
+    if (!$('#shelf') || !state.cat) return;
+    const f = state.f;
+    const base = filtered(true);
+    const facets = { all: base.length };
+    base.forEach((t) => { facets[t.group] = (facets[t.group] || 0) + 1; if (t.catCode !== t.group) facets[t.catCode] = (facets[t.catCode] || 0) + 1; });
+    const cats = state.cat.groups;
+    $('#cats').innerHTML = `<h3>분류</h3><button class="${!f.group ? 'on' : ''}" data-g="">전체<span class="n">${facets.all}</span></button>` +
+      cats.filter((g) => g.isGroup && facets[g.code]).map((g) => {
+        const subs = cats.filter((x) => x.group === g.code && !x.isGroup && facets[x.code]);
+        return `<button class="${f.group === g.code && !f.cat ? 'on' : ''}" data-g="${g.code}">${esc(g.name)}<span class="n">${facets[g.code]}</span></button>` +
+          (f.group === g.code && subs.length ? `<div class="sub">${subs.map((s) => `<button class="${f.cat === s.code ? 'on' : ''}" data-g="${g.code}" data-c="${s.code}">${esc(s.name)}<span class="n">${facets[s.code]}</span></button>`).join('')}</div>` : '');
+      }).join('');
+    $$('#cats button').forEach((b) => b.onclick = () => { f.group = b.dataset.g; f.cat = b.dataset.c || ''; f.shown = 48; drawCatalog(); });
+    let list = filtered(false).slice();
+    const S = { new: (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '') || a.key.localeCompare(b.key, undefined, { numeric: true }), popular: (a, b) => b.loanCount - a.loanCount, title: (a, b) => a.title.localeCompare(b.title, 'ko'), code: (a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }) };
+    list.sort(S[f.sort]);
+    const label = f.cat ? catName(f.cat) : f.group ? catName(f.group) : f.q ? `'${f.q}' 검색 결과` : '전체 도서';
+    logQuery(f.q, list.length);
+    $('#tb').innerHTML = `<h2>${esc(label)}</h2><span class="count">${list.length.toLocaleString()}종</span><span class="spacer"></span><label class="chk"><input type="checkbox" id="avail" ${f.avail ? 'checked' : ''}> 지금 빌릴 수 있는 책만</label>`;
+    $('#avail').onchange = (e) => { f.avail = e.target.checked; f.shown = 48; drawCatalog(); };
+    $('#shelf').innerHTML = list.slice(0, f.shown).map((t) => `<button class="book" data-key="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, t.isNew ? '<span class="flag">신규</span>' : '')}
+      <div class="meta"><div class="t">${esc(t.title)}</div><div class="a">${esc(t.author || t.publisher || '')}</div><div style="margin-top:6px">${availPill(t)}</div></div></button>`).join('') ||
+      '<div class="empty" style="grid-column:1/-1">찾는 책이 없습니다. 검색어를 줄이거나 다른 분류를 선택해 보세요.<br><span class="small">읽고 싶은 책은 <a href="#/wish">희망도서</a>로 신청해 주세요. 임직원 투표를 거쳐 구매합니다.</span></div>';
+    $$('#shelf .book').forEach((b) => b.onclick = () => openBook(b.dataset.key));
+    $('#more').innerHTML = list.length > f.shown ? `<button class="btn">더 보기 (${(list.length - f.shown).toLocaleString()}종 남음)</button>` : '';
+    if ($('#more button')) $('#more button').onclick = () => { f.shown += 48; drawCatalog(); };
+    $('#hint').textContent = `대출기간 ${state.config.loanDays}일 · 신청 다음 영업일 14시부터 수령 · 1인 최대 ${state.config.maxLoansPerUser}권`;
+  }
+
+  // ─── 사번 입력 위젯 ───────────────────────────────
+  function empField(id, onOk) {
+    return {
+      html: `<div class="empbox"><label class="f">사번<input class="in" id="${id}" value="${esc(state.empNo)}" autocomplete="off" placeholder="사번을 입력하세요"></label><button type="button" class="btn" id="${id}Chk">확인</button></div><div id="${id}Who"></div>`,
+      bind(root) {
+        const inp = $('#' + id, root), who = $('#' + id + 'Who', root);
+        const check = async () => {
+          const v = inp.value.trim(); if (!v) return;
+          try { const w = await api('whoami', v); who.innerHTML = `<div class="whoami"><b>${esc(w.name)}</b> · ${esc(w.team)} <span class="muted small">${w.hasEmail ? '알림 메일 ' + esc(w.emailMasked) : '등록된 이메일이 없어 메일 알림을 받을 수 없습니다'}</span></div>`; onOk(w); }
+          catch (e) { who.innerHTML = `<div class="whoami err">${esc(e.message)}</div>`; onOk(null); }
+        };
+        $('#' + id + 'Chk', root).onclick = check;
+        inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
+        inp.addEventListener('input', () => { who.innerHTML = ''; onOk(null); });
+        if (inp.value) check();
+      },
+    };
+  }
+
+  // ─── 도서 상세 + 신청 ─────────────────────────────
+  async function openBook(key) {
+    const body = modal('<div class="empty">불러오는 중…</div>');
+    let b;
+    try { b = await api('title', key); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    const mine = state.myData?.active?.find((l) => l.titleKey === key);
+    const myRes = state.myData?.reservations?.find((r) => r.key === key);
+    const canBorrow = b.available > 0 && (!b.waiting || myRes?.rank === 1);
+    const nextDue = b.copies.filter((c) => c.dueDate).map((c) => c.dueDate).sort()[0];
+    const owned = b.copies.filter((c) => c.status !== '분실').length;
+    body.innerHTML = `<div class="detail"><div>${coverHTML(b)}</div><div>
+      <h2>${esc(b.title)}</h2><div class="by">${esc(b.author || '저자 정보 없음')}${b.publisher ? ` · ${esc(b.publisher)}` : ''}</div>
+      <div class="row">${b.available ? `<span class="pill ok">지금 대출 가능 (${b.available}/${owned}권)</span>` : '<span class="pill warn">모두 대출 중</span>'}${b.waiting ? `<span class="pill info">예약 ${b.waiting}명</span>` : ''}${!b.available && nextDue ? `<span class="small muted">가장 빠른 반납예정 ${pretty(nextDue)}</span>` : ''}</div>
+      <dl class="kv"><dt>분류</dt><dd>${esc(b.groupName)} › ${esc(b.catName)}</dd>
+        <dt>도서코드</dt><dd><div class="copies">${b.copies.map((c) => `<span class="copy"><b class="code">${esc(c.code)}</b>${c.status === '대출가능' ? '<span class="pill ok">가능</span>' : `<span class="pill ${c.status === '분실' ? 'bad' : 'warn'}">${esc(c.status)}</span>`}</span>`).join('')}</div></dd>
+        ${b.pubDate ? `<dt>출간</dt><dd>${esc(String(b.pubDate).slice(0, 10))}</dd>` : ''}${b.isbn ? `<dt>ISBN</dt><dd>${esc(b.isbn)}</dd>` : ''}<dt>누적 대출</dt><dd>${b.loanCount}회</dd></dl>
+      ${b.description ? `<div class="desc">${esc(b.description)}</div>` : '<p class="small muted">책 소개 정보가 없습니다. 아래 링크에서 자세히 볼 수 있습니다.</p>'}
+      <div class="row"><a class="btn sm" href="${esc(b.links.kyobo)}" target="_blank" rel="noopener">교보문고에서 보기</a><a class="btn sm" href="${esc(b.links.nl)}" target="_blank" rel="noopener">국립중앙도서관</a></div>
+      </div></div><div class="apply" id="apply"></div>`;
+    const ap = $('#apply', body);
+    if (mine) { ap.innerHTML = `<p>대출 중인 책입니다. 반납예정일은 <b>${pretty(mine.dueDate)}</b>입니다. <a href="#/me">내 대출 보기</a></p>`; return; }
+    if (myRes && !canBorrow) { ap.innerHTML = `<p>예약 ${myRes.rank}번째 순서로 기다리는 중입니다. 반납되면 메일로 알려드립니다.</p>`; return; }
+    const mode = canBorrow ? 'loan' : 'reserve';
+    let who = null;
+    const ef = empField('emp', (w) => { who = w; $('#go', ap).disabled = !w; });
+    ap.innerHTML = `<h3>${mode === 'loan' ? '대출 신청' : '예약하기'}</h3>
+      <p class="small muted" style="margin:0 0 12px">${mode === 'loan' ? `신청하면 <b>다음 영업일 14:00~18:00</b>에 ${esc(state.config.location)} 대출도서 칸에서 수령할 수 있습니다.` : '반납되면 1순위 예약자에게 메일로 알려드리고 대출 우선권을 드립니다.'}</p>
+      ${ef.html}<div class="row" style="margin-top:14px"><span class="small muted">사번 확인 후 신청할 수 있습니다.</span><span class="spacer"></span><button class="btn primary lg" id="go" disabled>${mode === 'loan' ? '대출 신청하기' : '예약하기'}</button></div>`;
+    ef.bind(ap);
+    $('#go', ap).onclick = async () => {
+      if (!who) return;
+      $('#go', ap).disabled = true;
+      try {
+        if (mode === 'loan') {
+          const l = await api('apply', key, who.empNo);
+          state.empNo = who.empNo; store.set('lib.emp', who.empNo);
+          body.innerHTML = `<div class="done"><div class="big">대출 신청이 완료되었습니다</div><p class="muted">「${esc(l.bookTitle)}」</p>
+            <dl class="ticket"><dt>도서코드</dt><dd>${esc(l.bookCode)}</dd><dt>수령</dt><dd>${pretty(l.pickupDate)} 14:00~18:00</dd><dt>장소</dt><dd>${esc(state.config.location)} · 대출도서 칸</dd><dt>반납예정일</dt><dd>${pretty(l.dueDate)}</dd></dl>
+            <p class="small muted">신청 내역을 메일로 보내드렸습니다. 반납일이 다가오면 메일과 사이트로 알려드립니다.</p>
+            <div class="row" style="justify-content:center"><a class="btn" href="#/me">내 대출 보기</a><button class="btn primary" id="ok">계속 둘러보기</button></div></div>`;
+          $('#ok', body).onclick = closeModal;
+        } else {
+          const r = await api('reserve', key, who.empNo);
+          state.empNo = who.empNo; store.set('lib.emp', who.empNo);
+          ap.innerHTML = `<p><b>예약되었습니다.</b> 현재 ${r.rank}번째 순서입니다. 반납되면 메일로 알려드립니다.</p>`;
+        }
+        await Promise.all([loadCatalog(true), refreshMe()]);
+        drawCatalog();
+      } catch (err) { toast(err.message, true); $('#go', ap).disabled = false; }
+    };
+  }
+
+  // ─── 내 대출 (사번 조회) ──────────────────────────
+  async function renderMe() {
+    if (!state.empNo) return renderIdentify();
+    view.innerHTML = '<div class="empty">불러오는 중…</div>';
+    await refreshMe();
+    const d = state.myData;
+    if (!d) { state.empNo = ''; store.set('lib.emp', null); return renderIdentify('사번을 다시 확인해 주세요.'); }
+    const row = (l, actions) => `<div class="loanrow">${coverHTML({ title: l.bookTitle, catCode: String(l.bookCode).split('-')[0], cover: l.cover, isbn: l.isbn })}
+      <div><div style="font-weight:700">${esc(l.bookTitle)}</div><div class="small muted"><span class="code">${esc(l.bookCode)}</span> · 대출 ${short(l.loanDate)} · 반납예정 <b style="color:var(--ink)">${pretty(l.dueDate)}</b>${(l.extensions || []).length ? ` · 연장 ${l.extensions.length}회` : ''}${l.returnedAt ? ` · 반납 ${short(l.returnedAt)}` : ''}</div><div style="margin-top:6px">${loanPill(l)}</div></div>
+      <div class="row">${actions || ''}</div></div>`;
+    view.innerHTML = `<div class="row" style="margin-bottom:16px"><h2 style="font-size:22px;font-weight:800">${esc(d.me.name)}님의 대출</h2><span class="muted small">${esc(d.me.team)} · 사번 ${esc(d.me.empNo)}${d.me.emailMasked ? ' · 알림 ' + esc(d.me.emailMasked) : ''}</span><span class="spacer"></span><button class="btn sm ghost" id="switch">다른 사번으로 조회</button></div>
+      <div class="panel"><h2>대출 중 ${d.active.length}권</h2>${d.active.length ? d.active.map((l) => row(l, l.status === 'active' ? `<button class="btn sm" data-ext="${l.id}">${state.config.extendDays}일 연장</button><button class="btn sm primary" data-ret="${l.id}">반납했어요</button>` : '<span class="small muted">담당자가 확인하면 반납 완료됩니다</span>')).join('') : '<p class="muted">대출 중인 책이 없습니다. <a href="#/">읽을 책 찾아보기</a></p>'}</div>
+      ${d.reservations.length ? `<div class="panel"><h2>예약 ${d.reservations.length}건</h2>${d.reservations.map((r) => `<div class="loanrow">${coverHTML({ title: r.title, catCode: r.catCode, cover: r.cover, isbn: r.isbn })}<div><div style="font-weight:700">${esc(r.title)}</div><div class="small muted">${r.availableNow ? '<b style="color:var(--ok)">지금 대출 신청할 수 있습니다</b>' : `대기 ${r.rank}번째`}</div></div><div class="row">${r.availableNow ? `<button class="btn sm primary" data-open="${esc(r.key)}">대출 신청</button>` : ''}<button class="btn sm danger" data-cancel="${r.id}">예약 취소</button></div></div>`).join('')}</div>` : ''}
+      <div class="panel"><h2>지난 대출</h2>${d.history.length ? d.history.map((l) => row(l)).join('') : '<p class="muted">기록이 없습니다.</p>'}</div>
+      <p class="small muted" style="margin-top:16px">반납: 반납도서 칸에 책을 넣은 뒤 [반납했어요]를 눌러주세요. 연장은 ${state.config.maxExtensions}회 ${state.config.extendDays}일까지이며, 연체 중이거나 예약자가 있으면 연장할 수 없습니다.</p>`;
+    $('#switch').onclick = () => { state.empNo = ''; store.set('lib.emp', null); state.myData = null; renderAlerts(); renderIdentify(); };
+    $$('[data-ret]').forEach((b) => b.onclick = async () => { if (!confirm('반납도서 칸에 책을 넣으셨나요?')) return; try { await api('returnBook', b.dataset.ret, state.empNo); toast('반납 등록했습니다. 담당자 확인 후 반납 완료됩니다.'); state.cat = null; renderMe(); } catch (e) { toast(e.message, true); } });
+    $$('[data-ext]').forEach((b) => b.onclick = async () => { try { const r = await api('extend', b.dataset.ext, state.empNo); toast(r.autoApproved ? `연장되었습니다. 새 반납예정일 ${pretty(r.dueDate)}` : '연장 신청했습니다. 담당자 승인 후 메일로 알려드립니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
+    $$('[data-cancel]').forEach((b) => b.onclick = async () => { try { await api('cancelReservation', b.dataset.cancel, state.empNo); toast('예약을 취소했습니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
+    $$('[data-open]').forEach((b) => b.onclick = async () => { await loadCatalog(); openBook(b.dataset.open); });
+  }
+  function renderIdentify(msg) {
+    let who = null;
+    const ef = empField('meEmp', (w) => { who = w; $('#meGo').disabled = !w; });
+    view.innerHTML = `<div class="panel idbox"><h2>내 대출 조회</h2><p class="muted small" style="margin-top:-6px">사번으로 대출 현황, 반납예정일, 연체 알림을 확인합니다.${msg ? ` <b style="color:var(--bad)">${esc(msg)}</b>` : ''}</p>${ef.html}<button class="btn primary lg" id="meGo" style="width:100%;margin-top:14px" disabled>조회하기</button></div>`;
+    ef.bind(view);
+    $('#meGo').onclick = () => { if (!who) return; state.empNo = who.empNo; store.set('lib.emp', who.empNo); renderMe(); };
+  }
+
+  // ─── 이용안내 ─────────────────────────────────────
+  function renderGuide() {
+    const c = state.config;
+    view.innerHTML = `<div class="guide">
+      <div class="panel"><h2>이용 절차</h2><ol>
+        <li><b>책 찾기</b> — 도서 찾기에서 제목·저자로 검색하고, 책을 눌러 대출 가능 여부를 확인합니다.</li>
+        <li><b>대출 신청</b> — 사번을 입력해 본인 확인 후 [대출 신청하기]를 누릅니다. 도서코드는 자동으로 배정됩니다.</li>
+        <li><b>수령</b> — 신청 다음 영업일 14:00~18:00에 ${esc(c.location)} <b>대출도서 칸</b>에서 가져갑니다.<br><span class="small muted">예) 금요일 신청 → 다음 영업일 14시 이후 수령</span></li>
+        <li><b>반납</b> — ${c.loanDays}일 안에 <b>반납도서 칸</b>에 넣고, 내 대출에서 [반납했어요]를 누릅니다.</li></ol></div>
+      <div class="panel"><h2>유의사항</h2><ul>
+        <li>대출기간은 ${c.loanDays}일(휴무일 포함)이며, 반납예정일이 휴무일이면 다음 영업일까지 자동 연장됩니다.</li>
+        <li>1인 최대 ${c.maxLoansPerUser}권까지 빌릴 수 있습니다.</li>
+        <li>연장은 ${c.maxExtensions}회 ${c.extendDays}일 가능합니다. 더 필요하면 반납 후 다시 신청해 주세요.</li>
+        <li>연체 중에는 새로 대출할 수 없습니다.</li>
+        <li>모두 대출 중인 책은 예약할 수 있으며, 반납되면 메일로 알려드립니다.</li>
+        <li>반납예정일 3일 전과 당일, 연체 시에는 회사 메일로 안내가 발송됩니다.</li>
+        <li>담당자 확인 없이 도서를 반출하지 마세요. 분실 시 실물로 변상합니다.</li></ul></div>
+      <div class="panel"><h2>책 추천 · 희망도서</h2><ul><li><a href="#/recommend">책 추천</a>에서 직무와 고민을 고르면 보유 도서 3권을 추천해 드려요. 사번·이름은 묻지 않습니다.</li><li>읽고 싶은 책은 <a href="#/wish">희망도서</a>로 신청하세요. 임직원 투표 결과를 바탕으로 구매하고, 입고되면 메일로 알려드립니다.</li><li>임직원과 나누고 싶은 책 기부도 언제나 환영합니다.</li></ul></div>
+      <div class="panel"><h2>문의</h2><p style="margin:0">${esc(c.managerName)}<br>${esc(c.managerPhone)}${c.managerEmail ? `<br><a href="mailto:${esc(c.managerEmail)}">${esc(c.managerEmail)}</a>` : ''}</p></div></div>`;
+  }
+
+  // ─── 책 추천 (개인정보 없이: 직무 그룹·고민·키워드만) ───
+  async function renderRecommend() {
+    if (!state.recOpt) state.recOpt = await api('recommendOptions');
+    const o = state.recOpt;
+    const f = state.rec || (state.rec = { job: '', situations: [], situation: '', keywords: '' });
+    view.innerHTML = `<div class="rec">
+      <section class="panel rec-form">
+        <div class="rec-head"><h2>나에게 맞는 책 찾기</h2><span class="pill info">개인정보 입력 없음</span></div>
+        <p class="small muted rec-note">사번·이름·교육이력을 묻지 않아요. 입력한 내용은 누구인지 알 수 없는 키워드로만 남아 도서 구매에 참고합니다.</p>
+        <h3 class="step"><span>1</span>직무 그룹 <em>선택</em></h3>
+        <div class="choices" role="radiogroup" aria-label="직무 그룹">${o.jobs.map((j) => `<button type="button" class="choice ${f.job === j.id ? 'on' : ''}" data-job="${j.id}" role="radio" aria-checked="${f.job === j.id}"><b>${esc(j.name)}</b><span>${esc(j.desc)}</span></button>`).join('')}</div>
+        <h3 class="step"><span>2</span>요즘 고민 <em>여러 개 골라도 돼요</em></h3>
+        <div class="chips">${o.situations.map((x) => `<button type="button" class="chip ${f.situations.includes(x.id) ? 'on' : ''}" data-sit="${x.id}" aria-pressed="${f.situations.includes(x.id)}">${esc(x.label)}</button>`).join('')}</div>
+        <label class="f" style="margin-top:12px">직접 적어도 돼요<input class="in" id="recSit" value="${esc(f.situation)}" placeholder="예) 첫 팀장 됐어요, 보고서 잘 쓰고 싶어요" maxlength="100"></label>
+        <h3 class="step"><span>3</span>관심 키워드</h3>
+        <input class="in" id="recKw" value="${esc(f.keywords)}" placeholder="예) 협상, 엑셀, 리더십" maxlength="80">
+        <button class="btn primary lg" id="recGo" style="width:100%;margin-top:18px">책 3권 추천받기</button>
+      </section>
+      <section id="recOut" class="rec-out"><div class="rec-empty"><b>직무와 고민을 알려주시면</b><span>오스템문고 보유 도서 중에서 3권을 골라<br>추천 이유와 지금 빌릴 수 있는지 알려드려요.</span></div></section>
+    </div>`;
+    $$('[data-job]').forEach((b) => b.onclick = () => { f.job = f.job === b.dataset.job ? '' : b.dataset.job; $$('[data-job]').forEach((x) => { const on = x.dataset.job === f.job; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); }); });
+    $$('[data-sit]').forEach((b) => b.onclick = () => { const id = b.dataset.sit; f.situations = f.situations.includes(id) ? f.situations.filter((x) => x !== id) : f.situations.concat(id); b.classList.toggle('on'); b.setAttribute('aria-pressed', f.situations.includes(id)); });
+    const go = async () => {
+      f.situation = $('#recSit').value.trim(); f.keywords = $('#recKw').value.trim();
+      const out = $('#recOut');
+      out.innerHTML = '<div class="rec-empty"><span>보유 도서를 살펴보는 중…</span></div>';
+      try { const r = await api('recommend', { job: f.job, situations: f.situations, situation: f.situation, keywords: f.keywords }); drawRecs(r); }
+      catch (e) { out.innerHTML = `<div class="rec-empty"><span>${esc(e.message)}</span></div>`; }
+    };
+    $('#recGo').onclick = go;
+    ['#recSit', '#recKw'].forEach((id) => $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }));
+  }
+  function recCard(c, i) {
+    const cta = c.available > 0 ? '대출 신청' : '상세·예약';
+    return `<article class="reccard">
+      <button class="rc-cover" data-key="${esc(c.key)}" aria-label="${esc(c.title)} 상세보기">${coverHTML(c)}</button>
+      <div class="rc-body">
+        <div class="rc-no">추천 ${i + 1}</div>
+        <h3><button class="linklike" data-key="${esc(c.key)}">${esc(c.title)}</button></h3>
+        <div class="small muted">${esc(c.author || c.publisher || '')} · ${esc(c.catName)}</div>
+        <p class="rc-why"><b>추천 이유</b>${esc(c.reason)}</p>
+        <div class="row">${availPill(c)}<span class="spacer"></span><button class="btn sm ${c.available > 0 ? 'primary' : ''}" data-key="${esc(c.key)}">${cta}</button></div>
+        ${c.alt ? `<div class="rc-alt"><div class="small"><b>지금 바로 빌릴 수 있는 대체 도서</b></div><button class="altbook" data-key="${esc(c.alt.key)}"><b>${esc(c.alt.title)}</b><span class="small muted">${esc(c.alt.reason)}</span></button><div>${availPill(c.alt)}</div></div>` : ''}
+      </div></article>`;
+  }
+  function drawRecs(r) {
+    const out = $('#recOut');
+    const u = r.understood;
+    const told = [u.job && `직무 <b>${esc(u.job)}</b>`, u.situations.length && `고민 <b>${u.situations.map(esc).join(', ')}</b>`, u.keywords.length && `키워드 <b>${u.keywords.map(esc).join(', ')}</b>`].filter(Boolean).join(' · ');
+    const gap = `<div class="panel rec-gap"><b>보유 도서 중 꼭 맞는 책이 ${r.cards.length ? '많지 않아요' : '아직 없어요'}.</b><p class="small muted" style="margin:4px 0 10px">읽고 싶은 책을 신청해 주시면 임직원 투표를 거쳐 구매합니다. 이번 검색도 구매 참고 자료로 쓰여요.</p><button class="btn" id="toWish">희망도서 신청하기</button></div>`;
+    out.innerHTML = `<p class="small muted rec-told">${told ? '이렇게 이해했어요 — ' + told : ''}</p>${r.cards.length ? `<div class="reclist">${r.cards.map(recCard).join('')}</div>` : ''}${r.weak ? gap : ''}`;
+    $$('[data-key]', out).forEach((b) => b.onclick = async () => { await loadCatalog(); openBook(b.dataset.key); });
+    const tw = $('#toWish', out); if (tw) tw.onclick = () => { state.wishPrefill = { reason: [u.situations.join(', '), u.keywords.join(', ')].filter(Boolean).join(' / ') }; location.hash = '#/wish'; };
+    out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ─── 희망도서 신청 · 구매 투표 ─────────────────────
+  const REQ_PILL = { '접수': 'info', '투표중': 'warn', '구매확정': 'ok', '구매완료': 'ok', '반려': 'mute', '보유중': 'mute' };
+  const REQ_LABEL = { '구매완료': '입고 완료' };
+  const reqPill = (st) => `<span class="pill ${REQ_PILL[st] || 'mute'}">${esc(REQ_LABEL[st] || st)}</span>`;
+  async function renderWish() {
+    view.innerHTML = '<div class="empty">불러오는 중…</div>';
+    const d = await api('wishBoard');
+    const r = d.round, pre = state.wishPrefill || {};
+    state.wishPrefill = null;
+    const max = r ? Math.max(1, ...r.candidates.map((c) => c.count)) : 1;
+    const voteHTML = r ? `<section class="panel vote"><div class="row"><h2 style="margin:0">${esc(r.title)}</h2><span class="pill warn">투표 진행 중</span></div>
+        <p class="small muted" style="margin:6px 0 14px">마감 ${short(r.endDate)}${r.daysLeft != null ? ` (${r.daysLeft === 0 ? '오늘 마감' : 'D-' + r.daysLeft})` : ''} · 1인 최대 ${r.maxVotes}권 · 구매 예정 ${r.buyCount}권 · ${r.voters}명 참여</p>
+        <div class="cands">${r.candidates.map((c) => `<label class="cand2"><input type="checkbox" value="${esc(c.id)}"><div><b>${esc(c.title)}</b><div class="small muted">${esc([c.author, c.publisher].filter(Boolean).join(' · '))}</div>${c.reason ? `<div class="small" style="margin-top:2px">“${esc(c.reason)}”</div>` : ''}</div><div class="cnt"><span>${c.count}표</span><div class="bar"><i style="width:${Math.round(c.count / max * 100)}%"></i></div></div></label>`).join('')}</div>
+        <div id="voteEmp" style="margin-top:14px"></div>
+        <div class="row" style="margin-top:12px"><span class="small muted" id="voteHint">사번 확인 후 투표할 수 있어요. 한 번 더 투표하면 선택이 바뀝니다.</span><span class="spacer"></span><button class="btn primary" id="voteGo" disabled>투표하기</button></div></section>`
+      : `<section class="panel"><h2>구매 투표</h2><p class="muted" style="margin:0">지금 진행 중인 투표가 없어요. 희망도서를 신청해 두면 다음 투표 후보가 됩니다.</p>${d.lastRound && d.lastRound.result ? `<div class="small" style="margin-top:12px"><b>지난 투표 「${esc(d.lastRound.title)}」 결과</b> · ${d.lastRound.result.voters}명 참여<ol style="margin:6px 0 0;padding-left:20px">${d.lastRound.result.ranking.slice(0, 5).map((x) => `<li>${esc(x.title)} — ${x.votes}표 ${reqPill(x.status)}</li>`).join('')}</ol></div>` : ''}</section>`;
+    view.innerHTML = `<div class="wish">${voteHTML}
+      <div class="cols2" style="margin-top:16px">
+        <section class="panel"><h2>희망도서 신청</h2><p class="small muted" style="margin-top:-6px">신청한 책은 담당자 검토 후 구매 투표 후보가 됩니다. 입고되면 회사 메일로 알려드려요. 신청자 정보는 공개되지 않습니다.</p>
+          <form id="wf" style="display:grid;gap:10px"><label class="f">도서명 *<input class="in" name="title" required maxlength="120"></label><div class="grid2"><label class="f">저자<input class="in" name="author" maxlength="60"></label><label class="f">출판사<input class="in" name="publisher" maxlength="60"></label></div>
+          <label class="f">신청 이유<textarea class="in" name="reason" rows="3" maxlength="500" placeholder="예) 신규 팀장 교육 때 같이 읽고 싶어요">${esc(pre.reason || '')}</textarea></label><div id="wfEmp"></div><div id="wfMsg"></div><button class="btn primary" id="wfGo" disabled>신청하기</button></form></section>
+        <section class="panel"><h2>신청 현황 <span class="muted small">${d.requests.length}건</span></h2>${d.requests.length ? `<div class="reqlist">${d.requests.map((q) => `<div class="req"><div><b>${esc(q.title)}</b><div class="small muted">${esc([q.author, q.publisher].filter(Boolean).join(' · '))}${q.author || q.publisher ? ' · ' : ''}${short(q.createdAt)} 신청${q.votes ? ` · ${q.votes}표` : ''}</div>${q.status === '반려' && q.adminMemo ? `<div class="small muted">사유: ${esc(q.adminMemo)}</div>` : ''}</div>${reqPill(q.status)}</div>`).join('')}</div>` : '<p class="muted">아직 신청이 없어요. 첫 번째로 신청해 보세요.</p>'}</section>
+      </div></div>`;
+    // 투표
+    if (r) {
+      let voter = null;
+      const ef = empField('vEmp', async (w) => {
+        voter = w; $('#voteGo').disabled = !w;
+        if (w) { try { const b = await api('myBallot', r.id, w.empNo); $$('.cands input').forEach((c) => { c.checked = (b.myChoices || []).includes(c.value); }); if ((b.myChoices || []).length) $('#voteHint').textContent = `이미 ${b.myChoices.length}권에 투표했어요. 바꾸려면 다시 고르고 투표하세요.`; } catch (e) {} }
+      });
+      $('#voteEmp').innerHTML = ef.html; ef.bind($('#voteEmp'));
+      $$('.cands input').forEach((c) => c.onchange = () => { const n = $$('.cands input').filter((x) => x.checked).length; if (n > r.maxVotes) { c.checked = false; toast(`최대 ${r.maxVotes}권까지 고를 수 있어요.`, true); } });
+      $('#voteGo').onclick = async () => {
+        const ids = $$('.cands input').filter((x) => x.checked).map((x) => x.value);
+        if (!ids.length) return toast('투표할 책을 골라 주세요.', true);
+        try { await api('vote', r.id, ids, voter.empNo); toast('투표했어요. 마감 전까지 언제든 바꿀 수 있어요.'); renderWish(); } catch (e) { toast(e.message, true); }
+      };
+    }
+    // 신청
+    let who = null;
+    const wf = $('#wf');
+    const ef2 = empField('wEmp', (w) => { who = w; $('#wfGo').disabled = !w; });
+    $('#wfEmp').innerHTML = ef2.html; ef2.bind($('#wfEmp'));
+    const submit = async (force) => {
+      const fd = Object.fromEntries(new FormData(wf));
+      if (!fd.title.trim()) return toast('도서명을 입력해 주세요.', true);
+      try {
+        const res = await api('submitRequest', fd, who.empNo, !!force);
+        const msg = $('#wfMsg');
+        if (res.owned) { msg.innerHTML = `<div class="alert info" style="margin:0"><span>이미 보유 중인 책이에요: <b>${esc(res.owned.title)}</b> (${res.owned.available > 0 ? '지금 대출 가능' : '대출 중'})</span><button type="button" class="btn sm act" id="ownOpen">책 보기</button><button type="button" class="btn sm" id="ownForce">추가 구매로 신청</button></div>`; $('#ownOpen').onclick = async () => { await loadCatalog(); openBook(res.owned.key); }; $('#ownForce').onclick = () => submit(true); return; }
+        if (res.duplicate) { msg.innerHTML = `<div class="alert info" style="margin:0"><span>이미 신청된 책이에요: <b>${esc(res.duplicate.title)}</b> · ${esc(res.duplicate.status)}. 투표가 열리면 이 책에 투표해 주세요.</span></div>`; return; }
+        toast('신청했어요. 입고되면 메일로 알려드릴게요.'); renderWish();
+      } catch (e) { toast(e.message, true); }
+    };
+    wf.onsubmit = (e) => { e.preventDefault(); if (who) submit(false); };
+  }
+
+  // ═══ 관리자 ═══════════════════════════════════════
+  const TABS = [['dashboard', '대시보드'], ['register', '도서 등록'], ['loans', '대출 관리'], ['wish', '희망도서·투표'], ['insights', '구매 인사이트'], ['books', '장서 관리'], ['mail', '메일 발송'], ['data', '사원명부·데이터'], ['categories', '분류 관리'], ['settings', '설정']];
+  async function renderAdmin(tab, sub) {
+    if (!state.token) return renderLogin(tab);
+    view.innerHTML = `<div class="admin"><nav class="side" aria-label="관리 메뉴">${TABS.map(([k, n]) => `<a href="#/admin/${k}" class="${k === tab ? 'on' : ''}">${n}${k === 'loans' && state.overdue ? `<span class="badge">${state.overdue}</span>` : ''}</a>`).join('')}<a href="#" id="logout" style="margin-top:12px;color:var(--ink-3)">로그아웃</a></nav><section id="pane"><div class="empty">불러오는 중…</div></section></div>`;
+    $('#logout').onclick = (e) => { e.preventDefault(); state.token = ''; sstore.set('lib.adm', null); location.hash = '#/admin'; router(); };
+    const pane = $('#pane');
+    const fn = { dashboard: aDashboard, register: aRegister, loans: aLoans, wish: aWish, insights: aInsights, books: aBooks, mail: aMail, data: aData, categories: aCategories, settings: aSettings }[tab] || aDashboard;
+    try { await fn(pane, sub); } catch (e) { if (e.auth) return renderLogin(tab); pane.innerHTML = `<div class="panel">${esc(e.message)}</div>`; }
+    if (state.initialPw) pane.insertAdjacentHTML('afterbegin', '<div class="alert warn" style="margin-bottom:16px"><span>초기 관리자 비밀번호를 사용 중입니다. 설정에서 바꿔주세요.</span><a class="act" href="#/admin/settings">비밀번호 변경</a></div>');
+  }
+  function renderLogin(tab) {
+    view.innerHTML = '<div class="panel idbox"><h2>관리자 로그인</h2><form id="lf" style="display:grid;gap:12px"><label class="f">이름 (반납확인자로 기록됩니다)<input class="in" name="name" placeholder="예) 장유영"></label><label class="f">비밀번호<input class="in" type="password" name="password" required></label><button class="btn primary lg">로그인</button></form></div>';
+    $('#lf').onsubmit = async (e) => { e.preventDefault(); const fd = Object.fromEntries(new FormData(e.target)); try { const r = await api('login', fd.password, fd.name); state.token = r.token; state.initialPw = r.isInitialPassword; sstore.set('lib.adm', r.token); renderAdmin(tab); } catch (err) { toast(err.message, true); } };
+  }
+
+  const loanTable = (rows, extra) => rows.length ? `<div class="tw"><table class="t"><tr><th>성명</th><th>도서</th><th>반납예정</th><th></th></tr>${rows.map((l) => `<tr><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td>${short(l.dueDate)}<div>${loanPill(l)}</div></td><td style="text-align:right;white-space:nowrap">${extra(l)}</td></tr>`).join('')}</table></div>` : '<p class="muted small">없음</p>';
+  function bindLoanActions(root, reload) {
+    $$('[data-ret]', root).forEach((b) => b.onclick = async () => { try { await api('confirmReturn', [b.dataset.ret]); toast('반납 처리했습니다.'); state.cat = null; reload(); } catch (e) { toast(e.message, true); } });
+    $$('[data-ext]', root).forEach((b) => b.onclick = async () => { try { const l = await api('extendLoan', b.dataset.ext, true); toast(`연장했습니다. 새 반납예정일 ${pretty(l.dueDate)}`); reload(); } catch (e) { toast(e.message, true); } });
+    $$('[data-rej]', root).forEach((b) => b.onclick = async () => { try { await api('extendLoan', b.dataset.rej, false); toast('연장을 거절하고 안내 메일을 보냈습니다.'); reload(); } catch (e) { toast(e.message, true); } });
+  }
+
+  async function aDashboard(pane) {
+    const d = await api('dashboard');
+    const c = d.counts; state.overdue = c.overdue;
+    const max = Math.max(1, ...d.monthly.map((m) => m.count));
+    const mailOk = d.mail.enabled && d.mail.triggerOk !== false;
+    pane.innerHTML = `
+      <div class="mailstate" style="background:${mailOk ? 'var(--ok-soft)' : 'var(--warn-soft)'}"><span>${mailOk ? `자동 메일 사용 중 — 영업일 매일 ${d.mail.sendHour}시에 반납예정·연체 안내를 보냅니다.` : '자동 메일이 꺼져 있습니다.'}${d.mail.lastRun ? ` <span class="muted small">마지막 실행 ${esc(d.mail.lastRun.replace('T', ' ').slice(0, 16))}</span>` : ''}${d.mail.quota != null ? ` <span class="muted small">· 오늘 남은 발송량 ${d.mail.quota}통</span>` : ''}</span><span class="spacer"></span><a class="btn sm" href="#/admin/mail">발송 관리</a></div>
+      <div class="stats">
+        <div class="stat bad"><b>${c.overdue}</b><span>연체</span></div><div class="stat warn"><b>${c.dueSoon}</b><span>3일 내 반납예정</span></div>
+        <div class="stat info"><b>${c.returning}</b><span>반납 확인 대기</span></div><div class="stat"><b>${c.open}</b><span>대출 중</span></div>
+        <div class="stat"><b>${c.thisMonth}</b><span>이번 달 대출</span></div><div class="stat"><b>${c.titles.toLocaleString()}</b><span>보유 도서 종수 (${c.books.toLocaleString()}권)</span></div></div>
+      ${!c.employees ? '<div class="alert danger" style="margin-bottom:16px"><span>사원명부가 비어 있어 사번 조회·신청이 되지 않습니다.</span><a class="act" href="#/admin/data">사원명부 넣기</a></div>' : ''}
+      ${c.noEmail ? `<div class="alert warn" style="margin-bottom:16px"><span>사번·이메일이 연결되지 않은 대출 ${c.noEmail}건은 자동 메일을 받을 수 없습니다.</span><a class="act" href="#/admin/loans/noemp">연결하기</a></div>` : ''}
+      <div class="cols2">
+        <div class="panel"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">반납 확인 대기 ${d.returning.length}</h2><span class="spacer"></span>${d.returning.length ? '<button class="btn sm primary" id="retAll">모두 반납 처리</button>' : ''}</div><p class="small muted" style="margin-top:0">사용자가 [반납했어요]를 누른 책입니다. 반납도서 칸을 확인하고 처리하세요.</p>${loanTable(d.returning, (l) => `<button class="btn sm" data-ret="${l.id}">반납 확인</button>`)}</div>
+        <div class="panel"><h2>연장 승인 대기 ${d.extensionRequests.length}</h2>${loanTable(d.extensionRequests, (l) => `<button class="btn sm primary" data-ext="${l.id}">승인</button> <button class="btn sm" data-rej="${l.id}">거절</button>`)}</div></div>
+      <div class="panel" style="margin-top:16px"><h2>연체 ${d.overdue.length}건</h2>${d.overdue.length ? `<div class="tw"><table class="t"><tr><th>성명</th><th>도서</th><th>반납예정</th><th>연체</th><th>알림 메일</th><th></th></tr>${d.overdue.map((l) => `<tr><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td>${short(l.dueDate)}</td><td><span class="pill bad">${l.overdueDays}일</span></td><td class="small">${l.mail ? esc(l.mail) : '<span style="color:var(--bad)">없음</span>'}</td><td style="text-align:right"><button class="btn sm" data-ret="${l.id}">반납 확인</button></td></tr>`).join('')}</table></div>` : '<p class="muted">연체된 책이 없습니다.</p>'}</div>
+      <div class="panel"><h2>3일 내 반납예정 ${d.dueSoon.length}건</h2>${loanTable(d.dueSoon, (l) => `<button class="btn sm" data-ret="${l.id}">반납 확인</button>`)}</div>
+      <div class="cols2" style="margin-top:16px"><div class="panel"><h2>월별 대출</h2><div class="chart">${d.monthly.map((m) => `<div class="c"><b>${m.count || ''}</b><i style="height:${(m.count / max) * 100}%"></i><span>${Number(m.month.slice(5))}월</span></div>`).join('')}</div></div>
+        <div class="panel"><h2>많이 읽은 책</h2>${d.popular.map((p, i) => `<div class="row" style="padding:5px 0;border-top:${i ? '1px solid var(--line)' : '0'}"><span>${esc(p.title)}</span><span class="spacer"></span><span class="muted small">${p.count}회</span></div>`).join('')}</div></div>
+      ${d.reservations.length ? `<div class="panel" style="margin-top:16px"><h2>예약 대기 ${d.reservations.length}</h2><div class="tw"><table class="t"><tr><th>도서</th><th>예약자</th><th>예약일</th><th></th></tr>${d.reservations.map((r) => `<tr><td>${esc(r.title)}</td><td>${esc(r.name)} <span class="small muted">${esc(r.team)}</span></td><td>${short(r.createdAt)}</td><td style="text-align:right"><button class="btn sm danger" data-rcancel="${r.id}">취소</button></td></tr>`).join('')}</table></div></div>` : ''}`;
+    bindLoanActions(pane, () => aDashboard(pane));
+    if ($('#retAll', pane)) $('#retAll', pane).onclick = async () => { await api('confirmReturn', d.returning.map((l) => l.id)); toast(`${d.returning.length}건 반납 처리했습니다.`); state.cat = null; aDashboard(pane); };
+    $$('[data-rcancel]', pane).forEach((b) => b.onclick = async () => { if (!confirm('예약을 취소할까요?')) return; await api('cancelReservation', b.dataset.rcancel); aDashboard(pane); });
+  }
+
+  async function aRegister(pane) {
+    await loadCatalog();
+    const cats = state.cat.groups;
+    const leafOpts = cats.filter((c) => !c.isGroup || !cats.some((x) => x.group === c.code && !x.isGroup)).map((c) => `<option value="${c.code}">${c.code} ${esc(catName(c.group))} › ${esc(c.name)}</option>`).join('');
+    pane.innerHTML = `<div class="panel"><h2>새 도서 등록</h2><p class="small muted" style="margin-top:-6px">제목·저자·출판사를 입력하면 책 정보와 표지를 찾아오고, 분류와 도서코드를 자동으로 만들어 바로 대출 가능 상태로 등록합니다.</p>
+      <form id="rf" style="display:grid;gap:12px"><div class="grid2"><label class="f">도서명 *<input class="in" name="title" required></label><label class="f">저자<input class="in" name="author"></label></div>
+      <div class="grid3"><label class="f">출판사<input class="in" name="publisher"></label><label class="f">ISBN (바코드, 선택)<input class="in" name="isbn" inputmode="numeric"></label><label class="f">권수<input class="in" name="count" type="number" min="1" max="20" value="1"></label></div>
+      <div class="row"><button class="btn primary">책 정보 찾고 분류하기</button><span class="small muted" id="prov"></span></div></form></div><div id="step2"></div>`;
+    const form = $('#rf', pane);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = Object.fromEntries(new FormData(form));
+      const s2 = $('#step2', pane);
+      s2.innerHTML = '<div class="panel"><div class="empty">책 정보를 찾는 중…</div></div>';
+      let found = { results: [], providers: {} };
+      try { found = await api('lookup', input); } catch (err) { toast(err.message, true); }
+      const P = { kakao: '카카오', nl: '국립중앙도서관', naver: '네이버', google: 'Google Books' };
+      $('#prov', pane).textContent = '조회처: ' + Object.keys(found.providers || {}).filter((k) => found.providers[k]).map((k) => P[k]).join(', ');
+      const results = found.results || [];
+      const coverOf = (r) => r.cover || r.coverCandidate || '';
+      s2.innerHTML = `<div class="reg"><div class="panel"><h2>① 책 정보 선택</h2><div class="cls">${results.slice(0, 6).map((r, i) => `<button type="button" class="cand" data-i="${i}">${coverOf(r) ? `<img src="${esc(coverOf(r))}" alt="" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noimg'}))">` : '<div class="noimg"></div>'}<div><b>${esc(r.title)}</b><div class="small muted">${esc(r.author)} · ${esc(r.publisher)} · ${esc(String(r.pubDate || '').slice(0, 4))}</div><div class="small muted">ISBN ${esc(r.isbn || '-')}</div></div></button>`).join('')}
+        <button type="button" class="cand" data-i="-1"><div class="noimg"></div><div><b>입력한 정보 그대로 등록</b><div class="small muted">${results.length ? '검색 결과에 맞는 책이 없을 때' : '외부에서 책 정보를 찾지 못했습니다'}</div></div></button></div></div>
+        <div class="panel" id="clsPanel"><h2>② 분류 · 도서코드</h2><div class="empty small">왼쪽에서 책을 선택하세요.</div></div></div>`;
+      let picked = null;
+      const pick = async (i) => {
+        $$('.cand', s2).forEach((c) => c.classList.toggle('on', Number(c.dataset.i) === i));
+        const r = i >= 0 ? results[i] : {};
+        picked = { title: r.title || input.title, author: r.author || input.author, publisher: r.publisher || input.publisher, isbn: r.isbn || input.isbn, cover: r.cover && r.source !== 'google' ? r.cover : (r.coverCandidate || r.cover || ''), description: r.description || '', pubDate: r.pubDate || '', kdc: r.kdc || '', categories: r.categories || [], count: input.count };
+        const cp = $('#clsPanel', s2);
+        cp.innerHTML = '<h2>② 분류 · 도서코드</h2><div class="empty small">분류하는 중…</div>';
+        const cl = await api('classify', picked);
+        const top = cl.candidates[0];
+        let chosen = top ? top.code : '';
+        cp.innerHTML = `<h2>② 분류 · 도서코드</h2>${cl.sameBooks.length ? `<div class="alert info" style="margin-bottom:12px">이미 보유한 책입니다 (${cl.sameBooks.map((b) => esc(b.code)).join(', ')}). 같은 구매번호로 권번호를 이어서 등록합니다.</div>` : ''}
+          <div class="cls">${cl.candidates.length ? cl.candidates.map((c, j) => `<button type="button" class="clsopt ${j === 0 ? 'on' : ''}" data-code="${c.code}"><div class="bar" title="상대 추천도"><i style="width:${c.confidence}%"></i></div><div><b>${esc(c.groupName)} › ${esc(c.name)}</b> <span class="small muted">${c.code}</span><div class="why">${c.reasons.map(esc).join(' / ')}</div></div><span class="code">${c.preview.codes[0].code}</span></button>`).join('') : '<p class="small muted">자동 추천 근거가 부족합니다. 아래에서 분류를 직접 고르세요.</p>'}</div>
+          <label class="f" style="margin-top:12px">직접 선택<select class="in" id="manual"><option value="">— 추천 분류 사용 —</option>${leafOpts}</select></label>
+          <div style="margin:18px 0 6px" class="small muted">생성될 도서코드</div><div class="bigcode" id="codeOut">${top ? top.preview.codes.map((x) => x.code).join(', ') : '—'}</div>
+          <div class="row" style="margin-top:16px"><span class="small muted" id="clsName">${top ? `${esc(top.groupName)} › ${esc(top.name)}` : ''}</span><span class="spacer"></span><button class="btn primary lg" id="save" ${top ? '' : 'disabled'}>등록하고 대출 가능으로 공개</button></div>`;
+        const setCode = async () => {
+          if (!chosen) { $('#codeOut', cp).textContent = '—'; $('#save', cp).disabled = true; return; }
+          let c = cl.candidates.find((x) => x.code === chosen);
+          if (!c) { const one = await api('classify', { ...picked, forceCat: chosen }); c = one.candidates.find((x) => x.code === chosen); }
+          $('#codeOut', cp).textContent = c ? c.preview.codes.map((x) => x.code).join(', ') : '—';
+          $('#clsName', cp).textContent = `${catName(groupOf(chosen))} › ${catName(chosen)}`;
+          $('#save', cp).disabled = false;
+        };
+        $$('.clsopt', cp).forEach((b) => b.onclick = () => { $$('.clsopt', cp).forEach((x) => x.classList.remove('on')); b.classList.add('on'); chosen = b.dataset.code; $('#manual', cp).value = ''; setCode(); });
+        $('#manual', cp).onchange = (ev) => { if (ev.target.value) { $$('.clsopt', cp).forEach((x) => x.classList.remove('on')); chosen = ev.target.value; } else chosen = top ? top.code : ''; setCode(); };
+        $('#save', cp).onclick = async () => {
+          $('#save', cp).disabled = true;
+          try {
+            const r = await api('addBooks', { ...picked, catCode: chosen });
+            state.cat = null;
+            modal(`<div class="done"><div class="big">등록 완료</div><p class="muted">「${esc(r.created[0].title)}」 ${r.created.length}권이 대출 가능 상태로 공개되었습니다.</p><div class="bigcode" style="margin:18px 0">${r.created.map((x) => esc(x.code)).join('<br>')}</div><p class="small muted">책 등(라벨)에 위 도서코드를 붙여주세요.</p><div class="row" style="justify-content:center"><button class="btn primary" id="again">다음 책 등록</button></div></div>`, 'narrow');
+            $('#again').onclick = () => { closeModal(); aRegister(pane); };
+          } catch (err) { toast(err.message, true); $('#save', cp).disabled = false; }
+        };
+      };
+      $$('.cand', s2).forEach((c) => c.onclick = () => pick(Number(c.dataset.i)));
+      pick(results.length ? 0 : -1);
+    };
+  }
+
+  async function aLoans(pane, sub = 'open') {
+    const tabs = [['open', '진행 중'], ['overdue', '연체'], ['returning', '반납확인 대기'], ['noemp', '알림 불가'], ['returned', '반납 완료'], ['all', '전체']];
+    pane.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:12px"><div class="seg">${tabs.map(([k, n]) => `<button data-s="${k}" class="${k === sub ? 'on' : ''}">${n}</button>`).join('')}</div><span class="spacer"></span><input class="in" id="lq" placeholder="이름, 팀, 사번, 도서" style="max-width:200px"><button class="btn" id="newLoan">직접 대출 등록</button></div><div id="ltable"></div></div>`;
+    $$('.seg button', pane).forEach((b) => b.onclick = () => { location.hash = '#/admin/loans/' + b.dataset.s; });
+    const load = async () => {
+      const list = await api('loans', sub, $('#lq', pane).value);
+      $('#ltable', pane).innerHTML = list.length ? `<div class="tw"><table class="t"><tr><th>번호</th><th>도서</th><th>대출자</th><th>사번 / 메일</th><th>대출일</th><th>반납예정</th><th>상태</th><th></th></tr>${list.map((l) => `<tr>
+        <td class="code">${l.no || ''}</td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td>
+        <td>${l.empNo ? `<span class="code">${esc(l.empNo)}</span><div class="small muted">${esc(l.mail || '메일 없음')}</div>` : `<form class="row" data-emp="${l.id}"><input class="in" style="width:110px;padding:5px 8px;font-size:13px" placeholder="사번" required><button class="btn sm">연결</button></form>`}</td>
+        <td class="small">${short(l.loanDate)}</td><td class="small">${short(l.dueDate)}${(l.extensions || []).length ? ' <span class="muted">(연장)</span>' : ''}</td><td>${loanPill(l)}${l.memo ? `<div class="small muted">${esc(l.memo)}</div>` : ''}</td>
+        <td style="text-align:right;white-space:nowrap">${['active', 'returning'].includes(l.status) ? `<button class="btn sm" data-ret="${l.id}">반납</button> <button class="btn sm" data-ext="${l.id}">연장</button> <button class="btn sm ghost" data-more="${l.id}" aria-label="더보기">⋯</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="muted">해당하는 대출이 없습니다.</p>';
+      bindLoanActions(pane, load);
+      $$('[data-emp]', pane).forEach((f) => f.onsubmit = async (e) => { e.preventDefault(); try { await api('updateLoan', f.dataset.emp, { empNo: $('input', f).value }); toast('사번을 연결했습니다.'); load(); } catch (err) { toast(err.message, true); } });
+      $$('[data-more]', pane).forEach((b) => b.onclick = () => {
+        const m = modal('<h2 style="font-size:18px;margin-bottom:12px">대출 처리</h2><div style="display:grid;gap:8px"><button class="btn" data-st="cancelled">신청 취소 (미수령·중복 신청)</button><button class="btn danger" data-st="lost">분실 처리</button></div><label class="f" style="margin-top:14px">반납예정일 직접 변경<input class="in" type="date" id="due"></label><button class="btn primary" style="margin-top:8px" id="dueSave">변경</button>', 'narrow');
+        $$('[data-st]', m).forEach((x) => x.onclick = async () => { await api('setLoanStatus', b.dataset.more, x.dataset.st); closeModal(); toast('처리했습니다.'); state.cat = null; load(); });
+        $('#dueSave', m).onclick = async () => { if (!$('#due', m).value) return; await api('updateLoan', b.dataset.more, { dueDate: $('#due', m).value }); closeModal(); toast('반납예정일을 바꿨습니다.'); load(); };
+      });
+    };
+    let t; $('#lq', pane).oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
+    $('#newLoan', pane).onclick = () => {
+      let who = null;
+      const ef = empField('nlEmp', (w) => { who = w; });
+      const m = modal(`<h2 style="font-size:18px;margin-bottom:12px">직접 대출 등록</h2><p class="small muted">메일·전화로 받은 신청을 대신 등록합니다.</p><div style="display:grid;gap:10px"><label class="f">도서코드<input class="in" id="nlCode" placeholder="예) 103-021-2"></label>${ef.html}<label class="f">신청일<input class="in" type="date" id="nlDate"></label><button class="btn primary" id="nlGo">등록</button></div>`, 'narrow');
+      ef.bind(m);
+      $('#nlGo', m).onclick = async () => { if (!who) return toast('사번을 확인해 주세요.', true); try { const l = await api('createLoan', $('#nlCode', m).value.trim(), who.empNo, $('#nlDate', m).value); closeModal(); toast(`등록했습니다. 반납예정일 ${pretty(l.dueDate)}`); state.cat = null; load(); } catch (err) { toast(err.message, true); } };
+    };
+    await load();
+  }
+
+  async function aBooks(pane) {
+    pane.innerHTML = '<div class="panel"><div class="row" style="margin-bottom:12px"><h2 style="margin:0">장서 관리</h2><span class="spacer"></span><input class="in" id="bq" placeholder="도서명, 코드, 저자, ISBN" style="max-width:260px"><a class="btn primary" href="#/admin/register">새 도서 등록</a></div><div id="btable"></div></div>';
+    const load = async () => {
+      const list = await api('books', $('#bq', pane).value);
+      $('#btable', pane).innerHTML = `<div class="tw"><table class="t"><tr><th>도서코드</th><th>도서명</th><th>저자 / 출판사</th><th>분류</th><th>표지</th><th>상태</th><th>대출</th><th></th></tr>${list.map((b) => `<tr><td class="code">${esc(b.code)}</td><td>${esc(b.title)}</td><td class="small">${esc(b.author)}<div class="muted">${esc(b.publisher)}</div></td><td class="small">${esc(b.groupName)} › ${esc(b.catName)}</td><td>${b.cover ? '<span class="pill ok">있음</span>' : b.isbn ? '<span class="pill mute">확인 전</span>' : '<span class="pill mute">ISBN 없음</span>'}</td><td><span class="pill ${b.state === '대출가능' ? 'ok' : b.state === '분실' || b.state === '폐기' ? 'mute' : 'warn'}">${esc(b.state)}</span></td><td class="small">${b.loanCount || 0}</td><td><button class="btn sm ghost" data-edit="${esc(b.code)}">수정</button></td></tr>`).join('')}</table></div>${list.length >= 300 ? '<p class="small muted">최근 300권만 표시합니다. 검색으로 찾아주세요.</p>' : ''}`;
+      $$('[data-edit]', pane).forEach((x) => x.onclick = () => {
+        const b = list.find((y) => y.code === x.dataset.edit);
+        const m = modal(`<h2 style="font-size:18px;margin-bottom:12px">${esc(b.code)} 수정</h2><form id="ef" style="display:grid;gap:10px"><label class="f">도서명<input class="in" name="title" value="${esc(b.title)}"></label><div class="grid2"><label class="f">저자<input class="in" name="author" value="${esc(b.author)}"></label><label class="f">출판사<input class="in" name="publisher" value="${esc(b.publisher)}"></label></div><label class="f">ISBN<input class="in" name="isbn" value="${esc(b.isbn)}"></label><label class="f">표지 이미지 주소 (비우면 자동)<input class="in" name="cover" value="${esc(b.cover)}"></label><label class="f">상태<select class="in" name="status"><option value="active">정상</option><option value="lost">분실</option><option value="discarded">폐기 (목록에서 숨김)</option></select></label><button class="btn primary">저장</button></form>`, 'narrow');
+        $('[name=status]', m).value = b.status || 'active';
+        $('#ef', m).onsubmit = async (e) => { e.preventDefault(); await api('updateBook', b.code, Object.fromEntries(new FormData(e.target))); closeModal(); toast('저장했습니다.'); state.cat = null; load(); };
+      });
+    };
+    let t; $('#bq', pane).oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
+    await load();
+  }
+
+  async function aMail(pane) {
+    const [log, st] = await Promise.all([api('mailLog'), api('settings')]);
+    const s = st.settings;
+    const ST = { '발송': 'ok', '실패': 'bad', '수신자없음': 'mute', '발송꺼짐': 'mute' };
+    pane.innerHTML = `<div class="mailstate" style="background:var(--ok-soft)">메일은 이 시스템을 배포한 구글 계정의 Gmail로 발송됩니다. 오늘 남은 발송량 ${st.quota ?? '-'}통.</div>
+      <div class="cols2"><div class="panel"><h2>자동 발송 규칙</h2><ul class="small" style="padding-left:18px;margin:0;display:grid;gap:6px;color:var(--ink-2)">
+        <li>영업일 매일 <b>${s.mail.sendHour}시</b>쯤 자동 실행 (주말·공휴일 제외)</li><li>반납예정 <b>${s.mail.dueSoonDays.map((d) => (Number(d) === 0 ? '당일' : `${d}일 전`)).join(', ')}</b> 안내</li>
+        <li>연체 시 <b>${s.mail.overdueRepeatDays}일마다</b> 반납 요청 반복${s.mail.ccAdminOnOverdue ? ' (담당자 참조)' : ''}</li>
+        <li>매주 첫 영업일 담당자에게 현황 요약 ${s.mail.adminDigest && s.managerEmail ? `(${esc(s.managerEmail)})` : '<span style="color:var(--warn)">(설정에서 담당자 이메일 입력 필요)</span>'}</li><li>신청 확인·연장·예약 도서 안내는 즉시 발송</li></ul>
+        <div class="row" style="margin-top:14px"><button class="btn" id="prev">오늘 발송 대상 보기</button><button class="btn primary" id="run">지금 발송</button><a class="btn ghost" href="#/admin/settings">규칙 변경</a></div><div id="prevOut" class="small" style="margin-top:10px"></div></div>
+        <div class="panel"><h2>테스트 메일</h2><form id="tf" class="row"><input class="in" type="email" name="to" required placeholder="받을 주소" style="flex:1"><button class="btn">보내기</button></form></div></div>
+      <div class="panel" style="margin-top:16px"><h2>발송 기록 (최근 200건)</h2>${log.length ? `<div class="tw"><table class="t"><tr><th>시각</th><th>종류</th><th>받는 사람</th><th>제목</th><th>결과</th><th></th></tr>${log.map((m, i) => `<tr><td class="small">${esc(String(m.at).replace('T', ' ').slice(5, 16))}</td><td class="small">${esc(m.type)}</td><td class="small">${esc(m.to.join(', '))}</td><td>${esc(m.subject)}</td><td><span class="pill ${ST[m.status] || 'mute'}">${esc(m.status)}</span>${m.error ? `<div class="small" style="color:var(--bad)">${esc(m.error)}</div>` : ''}</td><td><button class="btn sm ghost" data-view="${i}">보기</button></td></tr>`).join('')}</table></div>` : '<p class="muted">아직 보낸 메일이 없습니다.</p>'}</div>`;
+    $$('[data-view]', pane).forEach((b) => b.onclick = async () => { const m = log[b.dataset.view]; const html = await api('mailBody', m.at, m.subject); const body = modal(`<h2 style="font-size:16px;margin-bottom:6px">${esc(m.subject)}</h2><iframe style="width:100%;height:480px;border:1px solid var(--line);border-radius:6px" sandbox></iframe>`); $('iframe', body).srcdoc = html || '<p>본문이 없습니다.</p>'; });
+    $('#prev', pane).onclick = async () => { const r = await api('mailPreview'); $('#prevOut', pane).innerHTML = r.plan.length ? r.plan.map((p) => `<div>· <b>${esc(p.name)}</b> ${esc(p.email)} — ${[...p.overdue.map((x) => '연체: ' + esc(x)), ...p.dueSoon.map(esc)].join(', ')}</div>`).join('') + (r.noEmail.length ? `<div style="color:var(--warn)">메일 없음: ${r.noEmail.map(esc).join(', ')}</div>` : '') : '오늘 새로 보낼 안내가 없습니다. (이미 보낸 안내는 다시 보내지 않습니다)'; };
+    $('#run', pane).onclick = async () => { if (!confirm('반납예정·연체 안내를 지금 발송할까요? 이미 보낸 안내는 중복 발송되지 않습니다.')) return; const r = await api('mailRun'); toast(`${r.sent}명에게 안내를 보냈습니다.`); aMail(pane); };
+    $('#tf', pane).onsubmit = async (e) => { e.preventDefault(); const r = await api('mailTest', e.target.to.value); toast(r.status === '발송' ? '테스트 메일을 보냈습니다.' : '발송 실패: ' + (r.error || r.status), r.status !== '발송'); aMail(pane); };
+  }
+
+  async function aData(pane) {
+    const [emp, st] = await Promise.all([api('employeesInfo'), api('settings')]);
+    pane.innerHTML = `<div class="panel"><h2>사원명부</h2><p class="small muted" style="margin-top:-6px">사번으로 본인 확인을 하고, 알림 메일은 사원명부의 이메일로 발송됩니다.</p>
+      <div class="stats" style="margin:12px 0"><div class="stat"><b>${emp.count}</b><span>등록된 사원</span></div><div class="stat ${emp.noEmail ? 'warn' : ''}"><b>${emp.noEmail}</b><span>이메일 없음</span></div></div>
+      <ol class="small" style="color:var(--ink-2);padding-left:18px;line-height:1.9"><li>아래 버튼으로 DB 시트의 <b>사원명부</b> 탭을 엽니다.</li><li>A~D열(사번·성명·소속·이메일)에 인사 데이터를 붙여넣습니다. 입·퇴사 시 이 탭만 고치면 됩니다.</li><li>[기존 대출과 연결]을 누르면 시트에서 옮겨온 대출 기록이 이름·소속으로 사번에 연결됩니다. (매일 자동으로도 실행)</li></ol>
+      <div class="row"><a class="btn primary" href="${esc(emp.url)}" target="_blank" rel="noopener">사원명부 탭 열기</a><button class="btn" id="match">기존 대출과 연결</button></div></div>
+      <div class="panel"><h2>데이터 내보내기</h2><p class="small muted" style="margin-top:-6px">현재 상태 그대로 CSV 파일로 내려받습니다. 엑셀에서 바로 열립니다.</p>
+        <div class="row"><button class="btn" data-exp="books">도서 목록 (권별·현재 대출자 포함)</button><button class="btn" data-exp="loans">전체 대출 기록</button><a class="btn" href="${esc(st.dbUrl)}" target="_blank" rel="noopener">DB 시트에서 직접 받기</a></div><div class="small muted" id="expOut" style="margin-top:6px"></div></div>
+      <div class="panel"><h2>데이터 점검</h2><p class="small muted" style="margin-top:-6px">기존 시트에서 반납 처리가 빠진 채 옮겨온 기록 등, 실제와 다를 수 있는 대출 기록을 찾습니다.</p><button class="btn" id="chk">점검 실행</button><div id="chkOut" style="margin-top:12px"></div></div>
+      <div class="panel"><h2>실제 책 표지</h2><p class="small muted" style="margin-top:-6px">ISBN으로 교보문고 표지를 찾고, 없으면 Google Books(카카오 키가 있으면 카카오)에서 가져옵니다. 10분마다 120권씩 자동으로 진행됩니다.</p><button class="btn" id="covers">지금 표지 가져오기</button> <span class="small muted" id="covOut"></span></div>
+      <div class="panel"><h2>기존 시트에서 다시 가져오기</h2><p class="small muted" style="margin-top:-6px">전환 기간에 기존 「2026 오스템문고 대출현황」 시트를 계속 썼다면, 새로 생긴 도서와 반납 처리를 가져옵니다. 이미 있는 기록은 건드리지 않습니다.</p><button class="btn" id="mig">기존 시트에서 가져오기</button> <span class="small muted" id="migOut"></span></div>
+      <div class="panel"><h2>데이터 보관 위치</h2><p class="small" style="margin:0">모든 데이터는 구글 스프레드시트 「오스템문고 시스템 DB」에 저장됩니다. 시트에서 직접 보고 고칠 수 있고, 구글 시트의 버전 기록으로 복구할 수 있습니다.</p><div class="row" style="margin-top:10px"><a class="btn" href="${esc(st.dbUrl)}" target="_blank" rel="noopener">DB 시트 열기</a></div></div>`;
+    $$('[data-exp]', pane).forEach((b) => b.onclick = async () => {
+      const out = $('#expOut', pane); out.textContent = '만드는 중…';
+      try {
+        const r = await api('exportData', b.dataset.exp);
+        const blob = new Blob(['\ufeff' + r.csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.setAttribute('download', r.name); a.style.display = 'none'; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+        out.textContent = `${r.name} (${r.count.toLocaleString()}행) 다운로드를 시작했습니다. 받아지지 않으면 [DB 시트에서 직접 받기] → 파일 → 다운로드를 이용하세요.`;
+      } catch (e) { out.textContent = e.message; }
+    });
+    const runCheck = async () => {
+      const box = $('#chkOut', pane); box.innerHTML = '<div class="small muted">점검 중…</div>';
+      const r = await api('dataCheck');
+      const row = (l) => `<tr><td class="code">${l.no || ''}</td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td><td class="small">${short(l.loanDate)}</td><td class="small">${short(l.dueDate)}</td>`;
+      box.innerHTML = `<p class="small" style="margin:0 0 8px">진행 중인 대출 ${r.openCount}건 점검 결과</p>` +
+        `<h3 style="font-size:15px;margin:14px 0 6px">① 반납 누락 의심 ${r.stale.length}건</h3>` +
+        (r.stale.length ? `<p class="small muted" style="margin:0 0 6px">같은 권을 이후에 다른 사람이 빌린 기록이 있는데 아직 대출중으로 남아 있습니다. 실제로는 반납된 것으로 보입니다.</p><div class="tw"><table class="t"><tr><th><input type="checkbox" id="stAll" checked></th><th>번호</th><th>도서</th><th>대출자</th><th>대출일</th><th>반납예정</th><th>이후 대출</th></tr>${r.stale.map((l) => `<tr><td><input type="checkbox" class="st" value="${esc(l.id)}" checked></td>${row(l).slice(4)}<td class="small">${l.later.map((x) => `${esc(x.name)} ${short(x.loanDate)} (${esc(x.status)})`).join('<br>')}</td></tr>`).join('')}</table></div><div class="row" style="margin-top:8px"><button class="btn primary" id="fixSt">선택한 기록을 반납완료로 정리</button></div>` : '<p class="small muted">없습니다.</p>') +
+        `<h3 style="font-size:15px;margin:18px 0 6px">② 한 권에 대출 기록이 2건 이상 ${r.dup.length}건</h3>` +
+        (r.dup.length ? `<p class="small muted" style="margin:0 0 6px">한 권은 동시에 한 명만 빌릴 수 있습니다. 실물을 확인해 한쪽을 [대출 관리]에서 반납 처리하거나 도서코드를 바로잡아 주세요.</p><div class="tw"><table class="t"><tr><th>번호</th><th>도서</th><th>대출자</th><th>대출일</th><th>반납예정</th></tr>${r.dup.map((d) => d.loans.map((l) => row(l) + '</tr>').join('')).join('')}</table></div>` : '<p class="small muted">없습니다.</p>') +
+        `<h3 style="font-size:15px;margin:18px 0 6px">③ 사번이 연결되지 않은 대출 ${r.noEmp.length}건</h3>` +
+        (r.noEmp.length ? `<p class="small muted" style="margin:0 0 6px">사원명부에서 이름·소속으로 찾지 못한 기록입니다. 메일 알림이 가지 않고, 본인이 '내 대출'에서 볼 수 없습니다. 사원명부를 채운 뒤 [기존 대출과 연결]을 누르거나, [대출 관리]에서 사번을 직접 지정하세요.</p><div class="tw"><table class="t"><tr><th>번호</th><th>도서</th><th>대출자</th><th>대출일</th><th>반납예정</th></tr>${r.noEmp.map((l) => row(l) + '</tr>').join('')}</table></div>` : '<p class="small muted">없습니다.</p>');
+      const all = $('#stAll', box); if (all) all.onchange = () => $$('.st', box).forEach((c) => c.checked = all.checked);
+      const fx = $('#fixSt', box);
+      if (fx) fx.onclick = async () => { const ids = $$('.st', box).filter((c) => c.checked).map((c) => c.value); if (!ids.length) return; const res = await api('fixStale', ids); toast(`${res.fixed}건을 반납완료로 정리했습니다.`); state.cat = null; runCheck(); };
+    };
+    $('#chk', pane).onclick = runCheck;
+    $('#match', pane).onclick = async () => { const r = await api('matchEmployees'); toast(`${r.matched}건을 사번에 연결했습니다.`); };
+    $('#covers', pane).onclick = async () => { $('#covOut', pane).textContent = '가져오는 중… (1분 정도 걸릴 수 있습니다)'; try { const r = await api('fillCovers'); $('#covOut', pane).textContent = `${r.checked}종 확인, ${r.found}종 표지 저장, 남은 ${r.remaining}종`; state.cat = null; } catch (e) { $('#covOut', pane).textContent = e.message; } };
+    $('#mig', pane).onclick = async () => { const r = await api('migrate', false); $('#migOut', pane).textContent = `도서 ${r.books}권, 대출 ${r.loans}건 반영`; state.cat = null; };
+  }
+
+  async function aCategories(pane) {
+    const { categories, counts } = await api('categories');
+    const groups = categories.filter((c) => c.isGroup);
+    pane.innerHTML = `<div class="panel"><h2>분류 관리</h2><p class="small muted" style="margin-top:-6px">키워드는 자동 분류에 쓰입니다. 제목·소개글에 키워드가 있으면 해당 분류를 추천합니다. 장서가 늘수록 기존 책과의 유사도로 추천이 더 정확해집니다.</p>
+      <form id="cf" class="row" style="margin:14px 0 20px"><select class="in" name="group" style="max-width:180px">${groups.map((g) => `<option value="${g.code}">${g.code} ${esc(g.name)}</option>`).join('')}</select><input class="in" name="code" placeholder="번호" style="max-width:90px"><input class="in" name="name" placeholder="새 소분류 이름" style="max-width:200px" required><input class="in" name="keywords" placeholder="키워드 (쉼표로 구분)" style="flex:1;min-width:160px"><button class="btn primary">소분류 추가</button></form>
+      ${groups.map((g) => `<details ${g.code === '100' ? 'open' : ''} style="border-top:1px solid var(--line);padding:10px 0"><summary style="cursor:pointer;font-weight:700">${g.code} ${esc(g.name)} <span class="muted small">${categories.filter((c) => c.group === g.code && !c.isGroup).length}개 소분류</span></summary><div class="tw"><table class="t" style="margin-top:8px"><tr><th>번호</th><th>소분류</th><th>보유</th><th>키워드</th><th></th></tr>${categories.filter((c) => c.group === g.code && !c.isGroup).map((c) => `<tr><td class="code">${c.code}</td><td>${esc(c.name)}</td><td class="small">${counts[c.code] || 0}권</td><td><input class="in" style="padding:5px 8px;font-size:13px" value="${esc((c.keywords || []).join(', '))}" data-kw="${c.code}"></td><td><button class="btn sm" data-save="${c.code}">저장</button></td></tr>`).join('')}</table></div></details>`).join('')}</div>`;
+    const cf = $('#cf', pane);
+    const fill = async () => { cf.code.value = await api('nextCategoryCode', cf.group.value); };
+    cf.group.onchange = fill; fill();
+    cf.onsubmit = async (e) => { e.preventDefault(); const f = Object.fromEntries(new FormData(cf)); try { await api('addCategory', f.code, f.name, f.keywords); state.cat = null; toast('소분류를 추가했습니다.'); aCategories(pane); } catch (err) { toast(err.message, true); } };
+    $$('[data-save]', pane).forEach((b) => b.onclick = async () => { await api('updateCategory', b.dataset.save, $(`[data-kw="${b.dataset.save}"]`, pane).value); toast('키워드를 저장했습니다.'); });
+  }
+
+  // ─── 관리자: 희망도서 · 투표 ───────────────────────
+  async function aWish(pane) {
+    const d = await api('wishAdmin');
+    const open = d.requests.filter((q) => q.status === '접수');
+    const live = d.rounds.find((x) => x.status === '진행');
+    const STS = ['접수', '투표중', '구매확정', '구매완료', '반려', '보유중'];
+    const in7 = (() => { const t = new Date(); t.setDate(t.getDate() + 7); return t.toISOString().slice(0, 10); })();
+    pane.innerHTML = `<div class="panel"><h2>구매 투표</h2>
+        ${live ? `<div class="alert warn" style="margin-bottom:12px"><span><b>${esc(live.title)}</b> 진행 중 · 마감 ${short(live.endDate)} · ${live.voters}명 참여</span><button class="btn sm act" data-close="${live.id}">지금 마감</button></div>
+          <div class="tw"><table class="t"><tr><th>후보</th><th>득표</th></tr>${live.candidates.slice().sort((a, b) => b.count - a.count).map((c) => `<tr><td>${esc(c.title)}</td><td><b>${c.count}</b>표</td></tr>`).join('')}</table></div>`
+        : `<p class="small muted" style="margin-top:-6px">아래 표에서 '접수' 상태인 책을 골라 투표를 엽니다. 마감일이 지나면 매일 아침 자동 마감되고, 상위 권수만큼 '구매확정'이 됩니다.</p>
+          <form id="rf" class="grid3" style="align-items:end"><label class="f">투표명<input class="in" name="title" placeholder="예) 11월 희망도서 투표"></label><label class="f">마감일<input class="in" type="date" name="endDate" value="${in7}"></label><div class="grid2"><label class="f">1인 투표 수<input class="in" type="number" name="maxVotes" value="3" min="1" max="10"></label><label class="f">구매 권수<input class="in" type="number" name="buyCount" value="5" min="1"></label></div></form>
+          <div class="row" style="margin-top:10px"><button class="btn primary" id="rGo">선택한 <span id="rN">0</span>권으로 투표 시작</button></div>`}
+      </div>
+      <div class="panel"><h2>희망도서 신청 ${d.requests.length}건 <span class="small muted">접수 ${open.length}</span></h2>
+        <p class="small muted" style="margin-top:-6px">[도서 등록]에서 같은 제목을 등록하면 '입고 완료'로 바뀌고 신청자에게 메일이 갑니다.</p>
+        ${d.requests.length ? `<div class="tw"><table class="t"><tr><th></th><th>도서</th><th>신청자</th><th>신청일</th><th>득표</th><th>상태 · 메모</th><th></th></tr>${d.requests.map((q) => `<tr>
+          <td>${q.status === '접수' && !live ? `<input type="checkbox" class="rsel" value="${esc(q.id)}">` : ''}</td>
+          <td><b>${esc(q.title)}</b><div class="small muted">${esc([q.author, q.publisher].filter(Boolean).join(' · '))}</div>${q.reason ? `<div class="small">“${esc(q.reason)}”</div>` : ''}${q.owned ? `<div class="small" style="color:var(--warn)">보유 중일 수 있음: ${esc(q.owned.title)}</div>` : ''}</td>
+          <td class="small">${esc(q.requester || '')}</td><td class="small">${short(q.createdAt)}</td><td>${q.votes || 0}</td>
+          <td><select class="in" style="padding:5px 8px;font-size:13px" data-st="${esc(q.id)}">${STS.map((x) => `<option ${x === q.status ? 'selected' : ''}>${x}</option>`).join('')}</select><input class="in" style="padding:5px 8px;font-size:13px;margin-top:4px" data-memo="${esc(q.id)}" value="${esc(q.adminMemo || '')}" placeholder="메모 (반려 사유는 공개됩니다)"></td>
+          <td><button class="btn sm" data-save="${esc(q.id)}">저장</button></td></tr>`).join('')}</table></div>` : '<p class="muted">신청이 없습니다.</p>'}
+      </div>
+      ${d.rounds.filter((x) => x.status === '마감').length ? `<div class="panel"><h2>지난 투표</h2>${d.rounds.filter((x) => x.status === '마감').map((x) => `<details style="border-top:1px solid var(--line);padding:10px 0"><summary style="cursor:pointer"><b>${esc(x.title)}</b> <span class="small muted">${short(x.startDate)}~${short(x.endDate)} · ${x.result ? x.result.voters : x.voters}명 참여</span></summary><ol class="small" style="margin:8px 0 0;padding-left:20px">${(x.result ? x.result.ranking : []).map((y) => `<li>${esc(y.title)} — ${y.votes}표 ${reqPill(y.status)}</li>`).join('')}</ol></details>`).join('')}</div>` : ''}`;
+    const sync = () => { const n = $$('.rsel', pane).filter((c) => c.checked).length; if ($('#rN', pane)) $('#rN', pane).textContent = n; };
+    $$('.rsel', pane).forEach((c) => c.onchange = sync);
+    const rGo = $('#rGo', pane);
+    if (rGo) rGo.onclick = async () => {
+      const fd = Object.fromEntries(new FormData($('#rf', pane)));
+      const ids = $$('.rsel', pane).filter((c) => c.checked).map((c) => c.value);
+      try { await api('createRound', { title: fd.title, endDate: fd.endDate, maxVotes: Number(fd.maxVotes), buyCount: Number(fd.buyCount), candidates: ids }); toast('투표를 시작했습니다. 사용자 화면의 [희망도서]에 표시됩니다.'); aWish(pane); } catch (e) { toast(e.message, true); }
+    };
+    $$('[data-close]', pane).forEach((b) => b.onclick = async () => { if (!confirm('지금 투표를 마감할까요? 상위 권수만큼 구매확정됩니다.')) return; try { await api('closeRound', b.dataset.close); toast('투표를 마감했습니다.'); aWish(pane); } catch (e) { toast(e.message, true); } });
+    $$('[data-save]', pane).forEach((b) => b.onclick = async () => { const id = b.dataset.save; try { await api('updateRequest', id, { status: $(`[data-st="${id}"]`, pane).value, adminMemo: $(`[data-memo="${id}"]`, pane).value }); toast('저장했습니다.'); } catch (e) { toast(e.message, true); } });
+  }
+
+  // ─── 관리자: 인사이트 (구매 우선순위) ─────────────
+  async function aInsights(pane, sub) {
+    const days = Number(sub) || 90;
+    const d = await api('insights', days);
+    const bars = (list) => { const m = Math.max(1, ...list.map((x) => x.count)); return list.length ? list.map((x) => `<div class="hbar"><span>${esc(x.name)}</span><div class="bar"><i style="width:${Math.round(x.count / m * 100)}%"></i></div><b>${x.count}</b></div>`).join('') : '<p class="small muted">아직 기록이 없습니다.</p>'; };
+    const pm = Math.max(1, ...d.gaps.map((g) => g.priority));
+    pane.innerHTML = `<div class="row" style="margin-bottom:14px"><h2 style="font-size:20px;margin:0">구매 인사이트</h2><span class="spacer"></span><div class="seg">${[30, 90, 180].map((n) => `<button data-d="${n}" class="${n === d.days ? 'on' : ''}">최근 ${n}일</button>`).join('')}</div></div>
+      <div class="stats"><div class="stat"><b>${d.totals.recommend}</b><span>책 추천 이용</span></div><div class="stat"><b>${d.totals.search}</b><span>도서 검색</span></div><div class="stat warn"><b>${d.totals.weakRecommend}</b><span>추천 결과 부족</span></div><div class="stat bad"><b>${d.totals.zeroSearch}</b><span>검색 결과 0건</span></div><div class="stat info"><b>${d.totals.requests}</b><span>희망도서 신청</span></div></div>
+      <div class="panel"><h2>자주 찾지만 보유가 적은 주제</h2><p class="small muted" style="margin-top:-6px">추천·검색에 쓰인 키워드를 모아, 찾는 사람은 많은데 관련 보유 도서가 3권 이하인 주제입니다. 우선순위 = (찾은 횟수 + 결과 부족 횟수 + 신청×3 + 득표×2) ÷ (1 + 보유 권수)</p>
+        ${d.gaps.length ? `<div class="tw"><table class="t"><tr><th>주제</th><th>찾은 횟수</th><th>결과 부족</th><th>관련 보유</th><th>희망도서</th><th style="min-width:140px">우선순위</th></tr>${d.gaps.map((g, i) => `<tr><td><b>${esc(g.term)}</b>${i < 3 ? ' <span class="pill warn">구매 검토</span>' : ''}</td><td>${g.count}<span class="small muted"> (추천 ${g.recommend}·검색 ${g.search})</span></td><td>${g.weak}</td><td>${g.owned}권</td><td>${g.requests ? `${g.requests}건 · ${g.votes}표` : '-'}</td><td><div class="row" style="flex-wrap:nowrap"><div class="bar" style="width:90px"><i style="width:${Math.round(g.priority / pm * 100)}%"></i></div><b>${g.priority}</b></div></td></tr>`).join('')}</table></div>` : '<p class="muted">아직 집계할 기록이 충분하지 않습니다. 사용자가 [책 추천]과 검색을 쓰면 자동으로 쌓입니다.</p>'}</div>
+      <div class="panel"><h2>구매 우선순위 제안</h2><p class="small muted" style="margin-top:-6px">진행 중인 희망도서를 득표와 관련 검색 수요로 정렬했습니다. 구매확정된 책이 맨 위에 옵니다.</p>
+        ${d.wish.length ? `<div class="tw"><table class="t"><tr><th>순위</th><th>도서</th><th>상태</th><th>득표</th><th>관련 검색</th></tr>${d.wish.map((w, i) => `<tr><td><b>${i + 1}</b></td><td>${esc(w.title)}<div class="small muted">${esc(w.author || '')}</div></td><td>${reqPill(w.status)}</td><td>${w.votes}</td><td>${w.demand}</td></tr>`).join('')}</table></div>` : '<p class="muted">진행 중인 희망도서가 없습니다.</p>'}</div>
+      <div class="cols2" style="margin-top:16px"><div class="panel"><h2>직무 그룹별 추천 이용</h2>${bars(d.jobs)}</div><div class="panel"><h2>많이 고른 고민</h2>${bars(d.situations)}</div></div>`;
+    $$('[data-d]', pane).forEach((b) => b.onclick = () => { location.hash = '#/admin/insights/' + b.dataset.d; });
+  }
+
+  async function aSettings(pane) {
+    const { settings: s, providers, keys } = await api('settings');
+    const P = { kakao: '카카오 책검색 (표지·소개 가장 풍부)', nl: '국립중앙도서관 서지 (분류기호 → 자동분류 정확도↑)', naver: '네이버 책검색', google: 'Google Books (키 불필요)' };
+    pane.innerHTML = `<form id="sf"><div class="panel"><h2>운영 정보</h2><div class="grid2">
+      <label class="f">문고 이름<input class="in" name="libraryName" value="${esc(s.libraryName)}"></label><label class="f">위치<input class="in" name="location" value="${esc(s.location)}"></label>
+      <label class="f">담당자<input class="in" name="managerName" value="${esc(s.managerName)}"></label><label class="f">연락처<input class="in" name="managerPhone" value="${esc(s.managerPhone)}"></label>
+      <label class="f">담당자 이메일 (요약 메일 수신·회신 주소)<input class="in" type="email" name="managerEmail" value="${esc(s.managerEmail)}"></label><span></span></div>
+      <label class="f" style="margin-top:12px">공지 (사용자 화면 상단)<input class="in" name="notice" value="${esc(s.notice)}" placeholder="예) 10/30(금) 문고 정리로 대출이 중단됩니다."></label></div>
+      <div class="panel"><h2>대출 규칙</h2><div class="grid3">
+      <label class="f">대출기간(일)<input class="in" type="number" name="loanDays" value="${s.loanDays}"></label><label class="f">연장기간(일)<input class="in" type="number" name="extendDays" value="${s.extendDays}"></label><label class="f">연장 가능 횟수<input class="in" type="number" name="maxExtensions" value="${s.maxExtensions}"></label>
+      <label class="f">1인 최대 권수<input class="in" type="number" name="maxLoansPerUser" value="${s.maxLoansPerUser}"></label><label class="f">'신규' 표시 기간(일)<input class="in" type="number" name="newBookDays" value="${s.newBookDays}"></label><span></span>
+      <label class="chk"><input type="checkbox" name="blockWhenOverdue" ${s.blockWhenOverdue ? 'checked' : ''}> 연체 중 신규 대출 제한</label><label class="chk"><input type="checkbox" name="autoApproveExtension" ${s.autoApproveExtension ? 'checked' : ''}> 연장 자동 승인</label><label class="chk"><input type="checkbox" name="autoConfirmReturn" ${s.autoConfirmReturn ? 'checked' : ''}> 반납 등록 즉시 반납 완료</label></div></div>
+      <div class="panel"><h2>자동 메일</h2><div class="grid3">
+      <label class="chk"><input type="checkbox" name="mail.enabled" ${s.mail.enabled ? 'checked' : ''}> 메일 발송 사용</label><label class="f">발송 시각(시)<input class="in" type="number" min="0" max="23" name="mail.sendHour" value="${s.mail.sendHour}"></label><label class="f">반납예정 안내 (며칠 전, 쉼표)<input class="in" name="mail.dueSoonDays" value="${s.mail.dueSoonDays.join(', ')}"></label>
+      <label class="f">연체 안내 반복 간격(일)<input class="in" type="number" name="mail.overdueRepeatDays" value="${s.mail.overdueRepeatDays}"></label><label class="chk"><input type="checkbox" name="mail.ccAdminOnOverdue" ${s.mail.ccAdminOnOverdue ? 'checked' : ''}> 연체 메일에 담당자 참조</label><label class="chk"><input type="checkbox" name="mail.adminDigest" ${s.mail.adminDigest ? 'checked' : ''}> 주간 요약 메일</label></div></div>
+      <div class="panel"><h2>공휴일</h2><p class="small muted" style="margin-top:-6px">수령일·반납예정일 계산에서 제외됩니다. 한 줄에 하나씩 YYYY-MM-DD.</p><textarea class="in" name="holidays" rows="6">${s.holidays.join('\n')}</textarea></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn primary lg">설정 저장</button></div></form>
+      <div class="panel" style="margin-top:16px"><h2>도서정보 조회 API 키</h2><p class="small muted" style="margin-top:-6px">없어도 동작하지만, 카카오 키(무료)를 넣으면 국내 도서의 표지·소개가 훨씬 잘 나옵니다.</p>
+        ${Object.keys(providers).map((k) => `<div class="row" style="padding:3px 0"><span class="pill ${providers[k] ? 'ok' : 'mute'}">${providers[k] ? '사용' : '미설정'}</span>${P[k]}</div>`).join('')}
+        <form id="kf" class="grid2" style="margin-top:12px"><label class="f">카카오 REST API 키<input class="in" name="kakao" placeholder="${keys.kakao || 'developers.kakao.com'}"></label><label class="f">국립중앙도서관 인증키<input class="in" name="nl" placeholder="${keys.nl || 'nl.go.kr/seoji'}"></label><label class="f">네이버 Client ID<input class="in" name="naverId" placeholder="${keys.naverId || ''}"></label><label class="f">네이버 Client Secret<input class="in" name="naverSecret"></label><div><button class="btn">키 저장</button></div></form></div>
+      <div class="panel"><h2>관리자 비밀번호</h2><form id="pf" class="row"><input class="in" type="password" name="pw" placeholder="새 비밀번호 (8자 이상)" style="max-width:260px" required><button class="btn">변경</button></form></div>`;
+    $('#sf', pane).onsubmit = async (e) => {
+      e.preventDefault();
+      const body = { mail: {} };
+      for (const el of e.target.elements) {
+        if (!el.name) continue;
+        const v = el.type === 'checkbox' ? el.checked : el.value;
+        if (el.name.startsWith('mail.')) body.mail[el.name.slice(5)] = el.name === 'mail.dueSoonDays' ? v.split(',').map((x) => Number(x.trim())).filter((x) => !isNaN(x)) : el.type === 'number' ? Number(v) : v;
+        else if (el.name === 'holidays') body.holidays = v.split(/\s+/).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+        else body[el.name] = el.type === 'number' ? Number(v) : v;
+      }
+      await api('saveSettings', body);
+      state.config = await api('config');
+      $('#libName').textContent = state.config.libraryName;
+      toast('설정을 저장했습니다.');
+    };
+    $('#kf', pane).onsubmit = async (e) => { e.preventDefault(); await api('saveKeys', Object.fromEntries(new FormData(e.target))); toast('API 키를 저장했습니다.'); aSettings(pane); };
+    $('#pf', pane).onsubmit = async (e) => { e.preventDefault(); try { await api('changePassword', e.target.pw.value); state.initialPw = false; toast('비밀번호를 바꿨습니다.'); e.target.reset(); } catch (err) { toast(err.message, true); } };
+  }
+
+  // ─── 시작 ─────────────────────────────────────────
+  (async () => {
+    try { state.config = await api('config'); } catch (e) { view.innerHTML = `<div class="panel idbox">${esc(e.message)}</div>`; return; }
+    $('#libName').textContent = state.config.libraryName;
+    window.addEventListener('hashchange', router);
+    await router();
+    refreshMe();
+  })();
+})();
+
+  </script>
+</body>
+</html>
