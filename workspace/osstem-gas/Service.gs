@@ -391,10 +391,34 @@ function addBooks_(input) {
       isbn: isbn, cover: input.cover || '', description: String(input.description || '').slice(0, 3000), pubDate: input.pubDate || '', kdc: input.kdc || '',
       status: 'active', loanCount: 0, createdAt: now, coverCheckedAt: input.cover ? today_() : '' };
   });
+  var after = sheetAfter_(created[0].code);
   save_('books', created);
   var fulfilled = 0;
   try { fulfilled = fulfillRequests_(created); } catch (e) { console.error('fulfillRequests', e); }
-  return created.map(function (b) { return { code: b.code, title: b.title, fulfilled: fulfilled }; });
+  var rows = created.map(sheetRow_);
+  return created.map(function (b, i) { return { code: b.code, title: b.title, fulfilled: fulfilled, after: after, sheetRow: rows[i] }; });
+}
+
+// 원본 「도서목록」 시트에 붙여넣을 한 줄 (A~S). 수식은 도서코드·바코드를 직접 넣어 어느 행에 붙여도 동작
+function codeSortKey_(code) { return String(code).split('-').map(function (x) { return ('00000' + x).slice(-5); }).join('-'); }
+function sheetAfter_(code) {
+  var k = codeSortKey_(code), best = '';
+  rows_('books').forEach(function (b) { var bk = codeSortKey_(b.code); if (bk < k && bk > codeSortKey_(best || '0')) best = b.code; });
+  return best;
+}
+function sheetRow_(b) {
+  var q = function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+  var code = q(b.code), bc = b.isbn ? b.isbn : '';
+  return [b.catCode, b.purchaseNo, b.copyNo, groupName_(b.catCode), catName_(b.catCode), b.code, b.title,
+    '=COUNTIF(F:F,' + code + ')', b.publisher, b.author,
+    '=iferror(if(today()>vlookup(' + code + ",'대출현황'!B:H,7,false),\"대출가능\",if(today()>=vlookup(" + code + ",'대출현황'!B:G,5,false),\"불가-대출중\",\"불가-예약됨\")),\"대출가능\")",
+    "=if(today()>maxifs('대출현황'!G:G,'대출현황'!B:B," + code + '),"대출가능","대출중")',
+    "=if(today()>=maxifs('대출현황'!H:H,'대출현황'!B:B," + code + '),"대출가능","대출중")',
+    bc,
+    bc ? '=hyperlink("http://www.kyobobook.co.kr/product/detailViewKor.laf?mallGb=KOR&ejkGb=KOR&barcode=' + bc + '","이동")' : '',
+    '', '(' + b.code + ') ' + catName_(b.catCode) + ' > ' + b.title,
+    "=COUNTIF('대출현황'!B:B," + code + ')',
+    bc ? '=hyperlink("http://www.nl.go.kr/nl/search/search.jsp?img=n&hanja=&sort=&desc=desc&all=on&topF1=cheonggu&kwd=' + bc + '","이동")' : ''];
 }
 
 function updateBook_(code, patch) {

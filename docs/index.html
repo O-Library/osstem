@@ -455,9 +455,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   <div class="alerts" id="alerts"></div>
   <main id="view"></main>
   <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
-  <script src="config.js?v=mw4o6wmv"></script>
+  <script src="config.js?v=mw4p1ogu"></script>
   <script>window.APP_MODE = 'user';</script>
-  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw4o6wmv"><\/script>');</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw4p1ogu"><\/script>');</script>
   <script>var BOOT = {};</script>
   <script>
 (() => {
@@ -1047,18 +1047,40 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     $$('[data-rcancel]', pane).forEach((b) => b.onclick = async () => { if (!confirm('예약을 취소할까요?')) return; await api('cancelReservation', b.dataset.rcancel); aDashboard(pane); });
   }
 
+  // 원본 시트로 옮길 책 (이 브라우저에 보관). 붙일 위치가 이어지는 책끼리 한 덩어리로 묶음
+  function pendingRows() { try { return JSON.parse(store.get('lib.sheetPending') || '[]'); } catch (e) { return []; } }
+  function drawPending(pane) {
+    const box = $('#pend', pane); if (!box) return;
+    const list = pendingRows().sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }));
+    if (!list.length) { box.innerHTML = ''; return; }
+    const blocks = [];
+    list.forEach((x) => { const last = blocks[blocks.length - 1]; if (last && (x.after === last.items[last.items.length - 1].code || x.after === last.after)) last.items.push(x); else blocks.push({ after: x.after, items: [x] }); });
+    box.innerHTML = `<div class="panel" style="margin-bottom:16px"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">원본 시트에 옮길 책 ${list.length}권</h2><span class="spacer"></span><button class="btn sm ghost" id="pendClear">다 옮겼어요, 목록 비우기</button></div>
+      <p class="small muted" style="margin:0 0 12px">「2026 오스템문고 대출현황」 › 도서목록에서 안내한 도서코드 줄 아래에 줄을 넣고, A열을 누른 뒤 붙여넣으세요. 다 옮긴 뒤 [반영!]을 하면 모두에게 보여요.</p>
+      ${blocks.map((bk, i) => `<div class="pblock" style="border-top:1px solid var(--line);padding:10px 0"><div class="row" style="align-items:center;gap:10px"><div><b>${bk.after ? `${esc(bk.after)} 줄 아래` : '맨 위'}</b>에 ${bk.items.length}줄 넣기<div class="small muted">${bk.items.map((x) => `${esc(x.code)} ${esc(x.title)}`).join('<br>')}</div></div><span class="spacer"></span><button class="btn sm" data-copy="${i}">복사</button></div></div>`).join('')}</div>`;
+    $$('[data-copy]', box).forEach((b) => b.onclick = async () => {
+      const tsv = blocks[Number(b.dataset.copy)].items.map((x) => x.row.join('\t')).join('\n');
+      try { await navigator.clipboard.writeText(tsv); toast('복사했어요. 시트에서 A열 칸을 누르고 붙여넣으세요.'); }
+      catch (e) { const t = document.createElement('textarea'); t.value = tsv; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); toast('복사했어요.'); }
+    });
+    $('#pendClear', box).onclick = () => { if (!confirm('목록을 비울까요? 시트에 옮기지 않은 줄은 다시 만들 수 없어요.')) return; store.set('lib.sheetPending', '[]'); drawPending(pane); };
+  }
+
   async function aRegister(pane) {
     await loadCatalog();
     const cats = state.cat.groups;
     const leafOpts = cats.filter((c) => !c.isGroup || !cats.some((x) => x.group === c.code && !x.isGroup)).map((c) => `<option value="${c.code}">${c.code} ${esc(catName(c.group))} › ${esc(c.name)}</option>`).join('');
-    pane.innerHTML = `<div class="panel"><h2>새 도서 등록</h2><p class="small muted" style="margin-top:-6px">제목·저자·출판사를 입력하면 책 정보와 표지를 찾아오고, 분류와 도서코드를 자동으로 만들어 바로 대출 가능 상태로 등록합니다.</p>
-      <form id="rf" style="display:grid;gap:12px"><div class="grid2"><label class="f">도서명 *<input class="in" name="title" required></label><label class="f">저자<input class="in" name="author"></label></div>
-      <div class="grid3"><label class="f">출판사<input class="in" name="publisher"></label><label class="f">ISBN (바코드, 선택)<input class="in" name="isbn" inputmode="numeric"></label><label class="f">권수<input class="in" name="count" type="number" min="1" max="20" value="1"></label></div>
+    pane.innerHTML = `<div id="pend"></div><div class="panel"><h2>새 도서 등록</h2><p class="small muted" style="margin-top:-6px">책 뒤 바코드(ISBN)만 입력해도 제목·저자·출판사·표지를 찾아오고, 분류와 도서코드를 매겨 드려요. 등록한 책은 원본 시트에 붙여넣을 줄로도 만들어 둡니다.</p>
+      <form id="rf" style="display:grid;gap:12px"><div class="grid3"><label class="f">바코드 (ISBN)<input class="in" name="isbn" inputmode="numeric" autofocus placeholder="978로 시작하는 13자리"></label><label class="f">권수<input class="in" name="count" type="number" min="1" max="20" value="1"></label><span></span></div>
+      <div class="grid3"><label class="f">도서명<input class="in" name="title" placeholder="바코드가 없을 때"></label><label class="f">저자<input class="in" name="author"></label><label class="f">출판사<input class="in" name="publisher"></label></div>
       <div class="row"><button class="btn primary">책 정보 찾고 분류하기</button><span class="small muted" id="prov"></span></div></form></div><div id="step2"></div>`;
+    drawPending(pane);
     const form = $('#rf', pane);
     form.onsubmit = async (e) => {
       e.preventDefault();
       const input = Object.fromEntries(new FormData(form));
+      input.isbn = String(input.isbn || '').replace(/\D/g, '');
+      if (!input.isbn && !input.title.trim()) return toast('바코드나 도서명을 입력해 주세요.', true);
       const s2 = $('#step2', pane);
       s2.innerHTML = '<div class="panel"><div class="empty">책 정보를 찾는 중…</div></div>';
       let found = { results: [], providers: {} };
@@ -1100,7 +1122,8 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
           try {
             const r = await api('addBooks', { ...picked, catCode: chosen });
             state.cat = null;
-            modal(`<div class="done"><div class="big">등록 완료</div><p class="muted">「${esc(r.created[0].title)}」 ${r.created.length}권이 대출 가능 상태로 공개되었습니다.</p><div class="bigcode" style="margin:18px 0">${r.created.map((x) => esc(x.code)).join('<br>')}</div><p class="small muted">책 등(라벨)에 위 도서코드를 붙여주세요.</p><div class="row" style="justify-content:center"><button class="btn primary" id="again">다음 책 등록</button></div></div>`, 'narrow');
+            if (r.created[0] && r.created[0].sheetRow) { const list = pendingRows(); r.created.forEach((x) => list.push({ code: x.code, title: x.title, after: x.after, row: x.sheetRow })); store.set('lib.sheetPending', JSON.stringify(list)); }
+            modal(`<div class="done"><div class="big">등록 완료</div><p class="muted">「${esc(r.created[0].title)}」 ${r.created.length}권을 등록했어요.</p><div class="bigcode" style="margin:18px 0">${r.created.map((x) => esc(x.code)).join('<br>')}</div><p class="small muted">책 등(라벨)에 위 도서코드를 붙여 주세요.${r.created[0].sheetRow ? '<br>원본 시트에 붙여넣을 줄은 [도서 등록] 맨 위 목록에 모아 둘게요.' : ''}</p><div class="row" style="justify-content:center"><button class="btn primary" id="again">다음 책 등록</button></div></div>`, 'narrow');
             $('#again').onclick = () => { closeModal(); aRegister(pane); };
           } catch (err) { toast(err.message, true); $('#save', cp).disabled = false; }
         };

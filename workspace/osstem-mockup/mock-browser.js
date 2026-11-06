@@ -34,6 +34,9 @@
   Spreadsheet.prototype.setSpreadsheetTimeZone = function () {};
 
   var files = {}, props = {}, cache = {}, triggers = [];
+  // 책 검색 API 키는 데모 데이터를 새로 받아도([반영!]) 남도록 따로 보관
+  var KEYS_KEY = 'osstem-demo-keys', KEY_NAMES = ['KAKAO_REST_KEY', 'NL_CERT_KEY', 'NAVER_CLIENT_ID', 'NAVER_CLIENT_SECRET'];
+  try { var savedKeys = JSON.parse(localStorage.getItem(KEYS_KEY) || '{}'); KEY_NAMES.forEach(function (k) { if (savedKeys[k]) props[k] = savedKeys[k]; }); } catch (e) {}
   window.__mock = { files: files, props: props, sent: [], Spreadsheet: Spreadsheet, Sheet: Sheet };
   window.SpreadsheetApp = {
     openById: function (id) { if (!files[id]) throw new Error('no file ' + id); return files[id]; },
@@ -48,7 +51,20 @@
   window.LockService = { getScriptLock: function () { return { waitLock: function () {}, releaseLock: function () {} }; } };
   window.Utilities = { formatDate: fmtDate, getUuid: function () { return (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()); }, sleep: function () {} };
   window.MailApp = { sendEmail: function (o) { window.__mock.sent.push(o); }, getRemainingDailyQuota: function () { return 1500 - window.__mock.sent.length; } };
-  window.UrlFetchApp = { fetchAll: function () { throw new Error('목업에서는 외부 조회를 하지 않습니다'); } };
+  // 책 정보 조회: 브라우저에서 직접 요청 (CORS를 허용하는 카카오·구글만 응답이 옴)
+  function Resp(code, text) { this.code = code; this.text = text; }
+  Resp.prototype.getResponseCode = function () { return this.code; };
+  Resp.prototype.getContentText = function () { return this.text; };
+  Resp.prototype.getHeaders = function () { return {}; };
+  window.UrlFetchApp = { fetchAll: function (reqs) {
+    return reqs.map(function (r) {
+      try {
+        var x = new XMLHttpRequest(); x.open('GET', r.url, false);
+        Object.keys(r.headers || {}).forEach(function (h) { x.setRequestHeader(h, r.headers[h]); });
+        x.send(); return new Resp(x.status, x.responseText);
+      } catch (e) { return new Resp(0, ''); }
+    });
+  } };
   window.ScriptApp = {
     getProjectTriggers: function () { return triggers; }, deleteTrigger: function (t) { triggers.splice(triggers.indexOf(t), 1); },
     newTrigger: function (fn) { var t = { getHandlerFunction: function () { return fn; } }; var c = {}; ['timeBased', 'atHour', 'nearMinute', 'everyDays', 'everyMinutes', 'inTimezone'].forEach(function (k) { c[k] = function () { return c; }; }); c.create = function () { triggers.push(t); return t; }; return c; },
@@ -69,6 +85,7 @@
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
   var KEY = 'osstem-demo-v12';
   window.__demoSave = function () {
+    try { var k = {}; KEY_NAMES.forEach(function (n) { if (props[n]) k[n] = props[n]; }); localStorage.setItem(KEYS_KEY, JSON.stringify(k)); } catch (e) {}
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };
   window.__demoLoad = function () {
