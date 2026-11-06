@@ -1,0 +1,2272 @@
+// 최초 1회 실행: 상단 [▷ 실행] (setup 선택) 
+function setup() { return setupImpl_(); }
+
+// ===== Util.gs =====
+// 공통 유틸: 오류, 날짜(Asia/Seoul), 영업일 계산
+var TZ = 'Asia/Seoul';
+
+var AppError = function (message) { this.message = message; this.app = true; };
+AppError.prototype = Object.create(Error.prototype);
+
+function uid_() { return Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
+function esc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function nowIso_() { return Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm:ss"); }
+
+var FAKE_TODAY = null; // 테스트용
+function today_() { return FAKE_TODAY || Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
+function nowHour_() { return Number(Utilities.formatDate(new Date(), TZ, 'H')); }
+
+function parseD_(d) { var p = d.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])); }
+function fmtD_(dt) { return dt.toISOString().slice(0, 10); }
+function addDays_(d, n) { var dt = parseD_(d); dt.setUTCDate(dt.getUTCDate() + n); return fmtD_(dt); }
+function diffDays_(a, b) { return Math.round((parseD_(a) - parseD_(b)) / 86400000); }
+function dow_(d) { return parseD_(d).getUTCDay(); }
+function isBizDay_(d, hol) { var w = dow_(d); return w !== 0 && w !== 6 && (hol || []).indexOf(d) < 0; }
+function nextBizDay_(d, hol) { var x = addDays_(d, 1); while (!isBizDay_(x, hol)) x = addDays_(x, 1); return x; }
+function toBizDay_(d, hol) { var x = d; while (!isBizDay_(x, hol)) x = addDays_(x, 1); return x; }
+var DOW_KO = ['일', '월', '화', '수', '목', '금', '토'];
+function pretty_(d) { if (!d) return ''; var p = d.split('-'); return p[0] + '년 ' + Number(p[1]) + '월 ' + Number(p[2]) + '일(' + DOW_KO[dow_(d)] + ')'; }
+
+function normDate_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  var s = String(v).trim();
+  var m = s.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})/);
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
+}
+
+function normEmp_(v) { return String(v == null ? '' : v).trim().replace(/\s/g, '').toUpperCase(); }
+function maskName_(n) { n = String(n || ''); if (n.length <= 1) return n; if (n.length === 2) return n[0] + '*'; return n[0] + '*'.repeat(n.length - 2) + n[n.length - 1]; }
+function maskEmail_(e) { e = String(e || ''); var p = e.split('@'); if (p.length < 2) return ''; return p[0].slice(0, 2) + '***@' + p[1]; }
+
+// ===== Db.gs =====
+// ─────────────────────────────────────────────────────
+// 시트 기반 저장소: "오스템문고 시스템 DB" 스프레드시트의 탭 = 테이블
+// ─────────────────────────────────────────────────────
+var TABLES = {
+  books: { sheet: '도서', cols: [
+    ['code', '도서코드'], ['catCode', '분류번호'], ['purchaseNo', '구매번호'], ['copyNo', '권번호'], ['title', '도서명'], ['author', '저자'],
+    ['publisher', '출판사'], ['isbn', 'ISBN'], ['cover', '표지URL'], ['description', '소개'], ['pubDate', '출간일'], ['kdc', 'KDC'],
+    ['status', '상태'], ['loanCount', '대출횟수'], ['createdAt', '등록일'], ['coverCheckedAt', '표지확인일']] },
+  loans: { sheet: '대출', cols: [
+    ['id', 'ID'], ['no', '번호'], ['bookCode', '도서코드'], ['titleKey', '책키'], ['bookTitle', '도서명'], ['empNo', '사번'], ['name', '성명'],
+    ['team', '소속'], ['email', '이메일'], ['appliedAt', '신청일시'], ['loanDate', '대출일'], ['pickupDate', '수령일'], ['dueDate', '반납예정일'],
+    ['status', '상태'], ['returnRequestedAt', '반납신청일시'], ['returnedAt', '반납확인일'], ['returnedBy', '반납확인자'],
+    ['extensions', '연장이력'], ['extensionRequest', '연장신청'], ['memo', '메모'], ['createdBy', '등록경로']] },
+  reservations: { sheet: '예약', cols: [
+    ['id', 'ID'], ['key', '책키'], ['title', '도서명'], ['empNo', '사번'], ['name', '성명'], ['team', '소속'], ['email', '이메일'],
+    ['createdAt', '예약일시'], ['status', '상태'], ['notifiedAt', '알림일시']] },
+  employees: { sheet: '사원명부', cols: [['empNo', '사번'], ['name', '성명'], ['team', '소속'], ['email', '이메일'], ['note', '비고']] },
+  categories: { sheet: '분류', cols: [['code', '분류번호'], ['name', '분류명'], ['keywords', '키워드']] },
+  mailLog: { sheet: '메일발송기록', cols: [
+    ['at', '일시'], ['type', '종류'], ['to', '받는사람'], ['cc', '참조'], ['subject', '제목'], ['status', '결과'], ['error', '오류'],
+    ['keys', '중복방지키'], ['html', '본문']] },
+  // 익명 검색·추천 기록 (사번·이름 없음)
+  searchLog: { sheet: '검색기록', cols: [['at', '일시'], ['source', '구분'], ['job', '직무그룹'], ['situations', '고민상황'], ['terms', '키워드'], ['hits', '관련보유도서수'], ['topScore', '최고점수']] },
+  // 희망도서 신청 · 구매 투표
+  requests: { sheet: '희망도서', cols: [
+    ['id', 'ID'], ['createdAt', '신청일시'], ['title', '도서명'], ['author', '저자'], ['publisher', '출판사'], ['reason', '신청이유'],
+    ['empNo', '신청자사번'], ['status', '상태'], ['roundId', '투표ID'], ['votes', '득표'], ['adminMemo', '담당자메모'], ['bookCode', '등록도서코드'], ['decidedAt', '처리일시']] },
+  rounds: { sheet: '구매투표', cols: [
+    ['id', 'ID'], ['title', '투표명'], ['startDate', '시작일'], ['endDate', '마감일'], ['maxVotes', '1인투표수'], ['buyCount', '구매권수'],
+    ['candidates', '후보'], ['status', '상태'], ['createdAt', '생성일시'], ['createdBy', '생성자'], ['result', '결과']] },
+  ballots: { sheet: '투표기록', cols: [['roundId', '투표ID'], ['empNo', '사번'], ['choices', '선택'], ['at', '일시']] },
+};
+var JSON_FIELDS = { extensions: 1, extensionRequest: 1, candidates: 1, choices: 1, result: 1 };
+var STATUS_KO = { active: '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실', discarded: '폐기', waiting: '대기', fulfilled: '대출완료' };
+var STATUS_EN = {}; Object.keys(STATUS_KO).forEach(function (k) { STATUS_EN[STATUS_KO[k]] = k; });
+
+var _ss = null;
+var _tables = {};
+
+function props_() { return PropertiesService.getScriptProperties(); }
+
+function db_() {
+  if (_ss) return _ss;
+  var id = props_().getProperty('DB_ID');
+  if (!id) throw new AppError('아직 초기 설정(setup)이 실행되지 않았습니다. 관리자에게 문의하세요.');
+  _ss = SpreadsheetApp.openById(id);
+  return _ss;
+}
+
+function cellOut_(key, v) {
+  if (v instanceof Date) {
+    var hasTime = v.getHours() || v.getMinutes() || v.getSeconds();
+    return Utilities.formatDate(v, TZ, hasTime ? "yyyy-MM-dd'T'HH:mm:ss" : 'yyyy-MM-dd');
+  }
+  if (JSON_FIELDS[key]) { var arr = key === 'extensions' || key === 'candidates' || key === 'choices'; if (v === '' || v == null) return arr ? [] : null; try { return JSON.parse(v); } catch (e) { return arr ? [] : null; } }
+  if (key === 'status' && STATUS_EN[v]) return STATUS_EN[v];
+  if (key === 'keywords') return String(v || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(String);
+  if (key === 'keys') return String(v || '').split(' ').filter(String);
+  if (key === 'votes' || key === 'hits' || key === 'maxVotes' || key === 'buyCount') return v === '' ? 0 : Number(v);
+  if (key === 'loanCount' || key === 'no') return v === '' ? (key === 'no' ? null : 0) : Number(v);
+  if (key === 'to' || key === 'cc') return String(v || '').split(',').map(function (s) { return s.trim(); }).filter(String);
+  return v === null || v === undefined ? '' : String(v);
+}
+
+function cellIn_(key, v) {
+  if (v === null || v === undefined) return '';
+  if (JSON_FIELDS[key]) return (Array.isArray(v) && !v.length) || v === '' ? '' : JSON.stringify(v);
+  if (key === 'status' && STATUS_KO[v]) return STATUS_KO[v];
+  if (key === 'keywords') return (v || []).join(', ');
+  if (key === 'keys') return (v || []).join(' ');
+  if (key === 'to' || key === 'cc') return (v || []).join(', ');
+  if (key === 'html') return String(v).slice(0, 20000);
+  return v;
+}
+
+function table_(name) {
+  if (_tables[name]) return _tables[name];
+  var def = TABLES[name];
+  var sh = db_().getSheetByName(def.sheet);
+  if (!sh) sh = ensureSheet_(db_(), def); // 새 기능의 탭은 처음 쓸 때 자동 생성
+  var values = sh.getDataRange().getValues();
+  var header = values[0] || [];
+  var idx = def.cols.map(function (c) { return header.indexOf(c[1]); });
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    if (row.join('') === '') continue;
+    var o = { _r: r + 1 };
+    def.cols.forEach(function (c, i) { o[c[0]] = idx[i] >= 0 ? cellOut_(c[0], row[idx[i]]) : cellOut_(c[0], ''); });
+    rows.push(o);
+  }
+  _tables[name] = { def: def, sheet: sh, rows: rows, idx: idx, width: header.length };
+  return _tables[name];
+}
+
+function rows_(name) { return table_(name).rows; }
+
+function toRow_(t, o) {
+  var arr = [];
+  for (var i = 0; i < t.width; i++) arr.push('');
+  t.def.cols.forEach(function (c, i) { if (t.idx[i] >= 0) arr[t.idx[i]] = cellIn_(c[0], o[c[0]]); });
+  return arr;
+}
+
+// 행 저장: _r 이 있으면 덮어쓰기, 없으면 추가
+function save_(name, objs) {
+  objs = [].concat(objs).filter(Boolean);
+  if (!objs.length) return;
+  var t = table_(name);
+  var fresh = objs.filter(function (o) { return !o._r; });
+  var old = objs.filter(function (o) { return o._r; });
+  if (old.length > 25) {
+    // 많이 바뀌면 전체를 한 번에 기록
+    var maxR = t.rows.reduce(function (m, o) { return Math.max(m, o._r || 0); }, 1);
+    var blank = toRow_(t, {}).map(function () { return ''; });
+    var all = [];
+    for (var r = 2; r <= maxR; r++) all.push(blank.slice());
+    t.rows.forEach(function (o) { if (o._r) all[o._r - 2] = toRow_(t, o); });
+    if (all.length) t.sheet.getRange(2, 1, all.length, t.width).setValues(all);
+  } else {
+    old.forEach(function (o) { t.sheet.getRange(o._r, 1, 1, t.width).setValues([toRow_(t, o)]); });
+  }
+  if (fresh.length) {
+    var start = Math.max(t.sheet.getLastRow(), 1) + 1;
+    t.sheet.getRange(start, 1, fresh.length, t.width).setValues(fresh.map(function (o) { return toRow_(t, o); }));
+    fresh.forEach(function (o, i) { o._r = start + i; if (t.rows.indexOf(o) < 0) t.rows.push(o); });
+  }
+  bumpVersion_();
+}
+
+function bumpVersion_() { try { CacheService.getScriptCache().remove('catalog_v2'); } catch (e) {} }
+
+function withLock_(fn) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try { _tables = {}; return fn(); } finally { SpreadsheetApp.flush(); lock.releaseLock(); }
+}
+
+// ─── 설정 (스크립트 속성에 JSON 저장) ───────────────
+var DEFAULT_SETTINGS = {
+  libraryName: '오스템문고',
+  location: 'EAST동 9층 스마트 오피스존 (인사본부 방향 중앙복도)',
+  managerName: '인재개발팀 장유영 사원',
+  managerPhone: '070-8644-7372',
+  managerEmail: 'yuyoung2@osstem.com',
+  loanDays: 21, extendDays: 7, maxExtensions: 1, maxLoansPerUser: 5,
+  blockWhenOverdue: true, autoApproveExtension: true, autoConfirmReturn: false, newBookDays: 60,
+  mail: { enabled: true, sendHour: 9, dueSoonDays: [3, 0], overdueRepeatDays: 3, adminDigest: true, ccAdminOnOverdue: false },
+  holidays: [
+    '2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-03-01', '2026-03-02', '2026-05-01', '2026-05-05', '2026-05-24', '2026-05-25',
+    '2026-06-03', '2026-06-06', '2026-08-15', '2026-08-17', '2026-09-24', '2026-09-25', '2026-09-26', '2026-10-03', '2026-10-05', '2026-10-09', '2026-12-25',
+    '2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-02-09', '2027-03-01', '2027-05-01', '2027-05-05', '2027-05-13', '2027-06-06',
+    '2027-08-15', '2027-08-16', '2027-09-14', '2027-09-15', '2027-09-16', '2027-10-03', '2027-10-04', '2027-10-09', '2027-10-11', '2027-12-25', '2027-12-27'],
+  notice: '',
+};
+var _settings = null;
+function settings_() {
+  if (_settings) return _settings;
+  var raw = props_().getProperty('SETTINGS');
+  var s = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  if (raw) { var o = JSON.parse(raw); Object.keys(o).forEach(function (k) { if (k === 'mail') Object.keys(o.mail).forEach(function (m) { s.mail[m] = o.mail[m]; }); else s[k] = o[k]; }); }
+  _settings = s;
+  return s;
+}
+function saveSettings_(s) { props_().setProperty('SETTINGS', JSON.stringify(s)); _settings = s; bumpVersion_(); }
+function meta_(k, v) { if (v === undefined) return props_().getProperty('META_' + k); props_().setProperty('META_' + k, String(v)); }
+
+// 큰 탭(메일발송기록)은 필요한 열만 / 마지막 N행만 읽기
+function columns_(name, keys) {
+  var def = TABLES[name];
+  var sh = db_().getSheetByName(def.sheet);
+  var last = sh.getLastRow();
+  if (last < 2) return [];
+  var header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var cols = keys.map(function (k) { var h = def.cols.filter(function (c) { return c[0] === k; })[0][1]; return header.indexOf(h); });
+  var data = cols.map(function (ci) { return ci < 0 ? null : sh.getRange(2, ci + 1, last - 1, 1).getValues(); });
+  var out = [];
+  for (var r = 0; r < last - 1; r++) { var o = {}; keys.forEach(function (k, i) { o[k] = cellOut_(k, data[i] ? data[i][r][0] : ''); }); out.push(o); }
+  return out;
+}
+function tail_(name, n) {
+  var def = TABLES[name];
+  var sh = db_().getSheetByName(def.sheet);
+  var last = sh.getLastRow(), width = sh.getLastColumn();
+  if (last < 2) return [];
+  var header = sh.getRange(1, 1, 1, width).getValues()[0];
+  var start = Math.max(2, last - n + 1);
+  return sh.getRange(start, 1, last - start + 1, width).getValues().map(function (row) {
+    var o = {}; def.cols.forEach(function (c) { var i = header.indexOf(c[1]); o[c[0]] = cellOut_(c[0], i >= 0 ? row[i] : ''); }); return o;
+  });
+}
+
+// ===== Categories.gs =====
+// 오스템도서분류 기본값 (setup 시 '분류' 탭으로 복사, 이후에는 탭/관리자 화면에서 수정)
+var DEFAULT_CAT_RAW = `100|경영/경제
+101|CS/세일즈|고객,cs,세일즈,영업,nps,판매,서비스품질
+102|간부관리|간부,부하,코칭,관리자,매니저,피드백
+103|경영전략|경영전략,전략,데이터,비즈니스모델,혁신,okr,스토리텔링,경쟁
+104|경영혁신|경영혁신,혁신,변화관리,디지털전환,dx
+105|기업경영일반|기업경영,경영,ceo
+106|서비스경영|서비스,호스피탈리티,고객경험
+107|의사결정|의사결정,결정,선택,판단
+108|인적자원관리|인적자원,hr,채용,인재,평가,보상
+109|조직관리|조직,팀워크,조직문화,구글,넷플릭스,일하는방식
+110|국내경영이야기|삼성,현대,한국기업,배민,토스,카카오,네이버
+111|해외경영이야기|아마존,애플,테슬라,도요타,나이키,파타고니아
+112|경제전망|트렌드,전망,미래,ai,인공지능,챗gpt,2025,2026,2027
+113|유통/상품|유통,상품,md,리테일,커머스
+114|마케팅전략|마케팅,브랜드,브랜딩,광고,콘텐츠,고객
+115|e-비즈니스|e비즈니스,플랫폼,온라인
+116|컨설팅|컨설팅,컨설턴트,맥킨지,문제해결
+117|기업문화|기업문화,문화
+118|경영학이론|경영학,드러커,이론
+119|생산관리|생산,품질,제조,도요타,린
+120|국제경제|국제경제,무역,글로벌,환율
+121|외국기업가|일론머스크,잡스,베이조스,기업가
+122|일본경제|일본경제
+123|금융경제|금융,은행,금리,화폐,돈의역사
+124|경영관리|경영관리,관리회계
+125|경제학일반|경제학,경제
+126|경제전략일반|경제전략
+127|기업실무관리|실무,업무,보고서,기획
+128|한국경제|한국경제
+129|창업|창업,스타트업,사업,ceo
+130|경영전략일반|경영,사장,리더,전략
+131|재무관리|재무,재무제표,회계,투자분석
+132|회계관리|회계,세무,원가
+133|디지털경제|디지털,블록체인,코인,메타버스,플랫폼
+134|산업경제|산업,반도체,제조업
+135|인사/총무|인사,총무,노무,근로
+136|경제상식/경제이야기|경제상식,경제이야기,경제
+137|재테크|재테크,부자,투자,주식,부동산,돈,부의,머니
+138|물류관리/SCM|물류,scm,공급망
+139|회계학일반|회계학
+140|마케팅이론|마케팅이론
+141|지식경영|지식경영
+142|경제이론|경제이론
+143|세계경제사|경제사
+200|자기계발
+201|고전처세|고전,논어,처세
+202|리더십향상|리더십,리더
+203|비즈니스소양|팀장,일잘,업무,팀플레이,직장
+204|성공스토리|성공,노트,습관
+205|자기혁신/자기관리|자기관리,그릿,습관,혁신,끈기
+206|직장처세술|직장,처세,회사
+207|프리젠테이션스킬|프레젠테이션,발표,ppt
+208|회의방법/토론|회의,토론,퍼실리테이션
+209|메모/문서서식|메모,문서,노트
+210|인간관계|인간관계,관계,사람
+211|커뮤니케이션|커뮤니케이션,소통
+212|시간관리|시간관리,시간
+213|유머|유머
+214|고전에서배우는리더십|고전,리더십
+215|인생처세술/삶의지혜|인생,삶,지혜
+216|아이디어|아이디어,생각,창의,스마트한
+217|대화와화술|대화,말투,화술,말하기,설명,스피치
+218|기획력|기획
+219|창의적문제해결|문제해결,창의
+220|자기관리/처세|자기관리,처세,명상록,멘탈,역행자
+221|대리/과장/팀장|대리,과장,팀장
+222|삶의지혜/조언|조언,지혜
+223|독서/글쓰기|독서,글쓰기,문장,책읽기,필사
+224|설득/협상|설득,협상
+225|진로/직업/적성|진로,직업,적성,커리어
+226|중년/퇴직/은퇴|중년,퇴직,은퇴,마흔,오십
+227|자기능력계발|능력,신경끄기,집중,몰입
+300|역사/문화
+301|조선시대|조선,왕조,실록,세종,정조
+302|유럽사|유럽,로마,영국사,프랑스
+303|서양사일반|서양사
+304|문명/문명사|문명,총균쇠,사피엔스
+305|세계사이야기|세계사
+306|교양세계사|교양세계사
+307|한국사|한국사,고려,삼국,근현대사
+308|일본사|일본사
+309|역사이야기|역사
+400|인문
+401|인문교양|인문학,교양,지식,인류,넥서스,호모
+402|교양철학|철학,세네카,스토아,니체
+403|서양철학일반|쇼펜하우어,칸트,서양철학
+404|교양심리|심리,마음,우울,감정,불안,자존감,융
+405|시론|시론
+406|심리이론|심리학,프로이트
+407|예술/대중문화|예술,미술,음악,영화,디자인
+408|독서/글쓰기|글쓰기,독서
+409|동양철학일반|동양철학,노자,장자,공자
+500|외국어
+501|영어|영어,english,토익,회화
+502|중국어|중국어
+503|일본어|일본어,jlpt
+600|소설
+601|감성소설|감성
+602|한국소설일반|장편소설,소설
+603|SF/과학소설|sf,우주,헤일메리,로봇
+604|영미소설일반|라이브러리,속죄
+605|드라마/영화소설|드라마,영화원작
+606|독일소설|독일
+607|일본소설|하루키,히가시노,잡화점
+608|고전소설|고전소설
+700|시/에세이
+701|한국에세이|에세이,산문,온도
+702|영미에세이|에세이
+703|한국시|시집
+704|일본에세이|일본에세이
+800|과학
+801|뇌과학|뇌,무의식,신경과학
+802|과학이야기|과학,물리,화학
+803|교양수학/수학이야기|수학
+804|교양생명과학|생명,생물,진화
+805|교양천문학|우주,천문,코스모스
+806|교양유전|유전자,유전
+900|종교
+901|성공/리더쉽|성경,기독교,불교
+1000|정치/사회
+1001|각국정치|각국정치
+1002|언론이론|언론,미디어
+1003|국제관계|국제관계,지정학,외교,전쟁
+1004|사회문제|사회문제,불평등,저출산
+1005|사회학일반|사회학,사회
+1006|정치일반|정치,민주주의
+1007|법학일반|법,법률
+1008|노동문제|노동
+1100|컴퓨터/IT
+1101|게임기획|게임
+1102|C++|c++
+1103|파워포인트|파워포인트,ppt
+1104|사무자동화|업무자동화,자동화,오피스
+1105|엑셀|엑셀,excel
+1106|전산통계/수치해석|통계,수치해석
+1107|웹프로그래밍일반|웹,html,javascript,react
+1108|데이터베이스일반|데이터베이스,sql
+1109|IT 일반서|it,노션,notion,챗gpt,디지털
+1110|UI/UX|ux,ui,사용자경험
+1111|인공지능|ai,인공지능,클로드,claude,제미나이,gemini,gpt,llm,머신러닝,딥러닝
+1112|프로그래밍|프로그래밍,코딩,파이썬,python,개발
+1200|건강
+1201|건강상식|건강,다이어트,운동,수면
+1300|기술/공학
+1301|의학이론|의학,임상
+1302|치과|치과,임플란트,교정,구강
+1400|취업/수험서
+1401|공인노무사|노무사
+1500|가정/육아|육아,아이,엄마,아빠,부모,자녀,문해력,금쪽이,아들`;
+
+// 분류 객체: { code, name, keywords, group, isGroup }
+function groupOf_(code) {
+  code = String(code);
+  return code.length >= 4 ? code.slice(0, code.length - 2) + '00' : code[0] + '00';
+}
+
+function defaultCategories_() {
+  return DEFAULT_CAT_RAW.split('\n').map(function (line) {
+    var p = line.split('|');
+    return { code: p[0], name: p[1], keywords: p[2] ? p[2].split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(String) : [] };
+  });
+}
+
+var _cats = null;
+// 화면에 보이는 '보기 분류' (도서코드·소분류 번호는 그대로, 비슷한 소분류를 묶어서 보여 주기만 함)
+// 관리자 화면 → 분류 관리에서 소분류마다 바꿀 수 있고, 바꾼 값은 설정(viewMap)에 저장
+var VIEW_DEFAULT = {
+  '103': '경영전략·혁신', '104': '경영전략·혁신', '105': '경영전략·혁신', '107': '경영전략·혁신', '110': '경영전략·혁신', '111': '경영전략·혁신',
+  '116': '경영전략·혁신', '118': '경영전략·혁신', '121': '경영전략·혁신', '124': '경영전략·혁신', '126': '경영전략·혁신', '127': '경영전략·혁신',
+  '130': '경영전략·혁신', '141': '경영전략·혁신', '102': '조직·인사', '108': '조직·인사', '109': '조직·인사', '117': '조직·인사',
+  '135': '조직·인사', '101': '마케팅·영업', '106': '마케팅·영업', '113': '마케팅·영업', '114': '마케팅·영업', '140': '마케팅·영업',
+  '112': '경제·트렌드', '115': '경제·트렌드', '120': '경제·트렌드', '122': '경제·트렌드', '125': '경제·트렌드', '128': '경제·트렌드',
+  '133': '경제·트렌드', '134': '경제·트렌드', '136': '경제·트렌드', '142': '경제·트렌드', '143': '경제·트렌드', '123': '재테크·금융',
+  '137': '재테크·금융', '131': '재무·회계', '132': '재무·회계', '139': '재무·회계', '119': '생산·물류·창업', '129': '생산·물류·창업',
+  '138': '생산·물류·창업', '202': '리더십·직장생활', '203': '리더십·직장생활', '206': '리더십·직장생활', '214': '리더십·직장생활', '221': '리더십·직장생활',
+  '207': '말하기·관계', '208': '말하기·관계', '210': '말하기·관계', '211': '말하기·관계', '213': '말하기·관계', '217': '말하기·관계',
+  '224': '말하기·관계', '209': '기획·글쓰기', '216': '기획·글쓰기', '218': '기획·글쓰기', '219': '기획·글쓰기', '223': '기획·글쓰기',
+  '205': '자기관리·습관', '212': '자기관리·습관', '220': '자기관리·습관', '227': '자기관리·습관', '201': '삶의 지혜·진로', '204': '삶의 지혜·진로',
+  '215': '삶의 지혜·진로', '222': '삶의 지혜·진로', '225': '삶의 지혜·진로', '226': '삶의 지혜·진로', '301': '한국사', '307': '한국사',
+  '302': '세계사', '303': '세계사', '304': '세계사', '305': '세계사', '306': '세계사', '308': '세계사',
+  '309': '세계사', '401': '인문교양', '405': '인문교양', '408': '인문교양', '402': '철학', '403': '철학',
+  '409': '철학', '404': '심리', '406': '심리', '407': '예술·대중문화', '501': '외국어', '502': '외국어',
+  '503': '외국어', '601': '한국소설', '602': '한국소설', '605': '한국소설', '604': '외국소설', '606': '외국소설',
+  '607': '외국소설', '608': '외국소설', '603': 'SF', '701': '에세이·시', '702': '에세이·시', '703': '에세이·시',
+  '704': '에세이·시', '802': '과학 이야기', '803': '과학 이야기', '805': '과학 이야기', '801': '뇌·생명과학', '804': '뇌·생명과학',
+  '806': '뇌·생명과학', '1004': '사회', '1005': '사회', '1008': '사회', '1001': '정치·법', '1002': '정치·법',
+  '1003': '정치·법', '1006': '정치·법', '1007': '정치·법', '1109': 'AI·IT', '1111': 'AI·IT', '1103': '엑셀·PPT·업무툴',
+  '1104': '엑셀·PPT·업무툴', '1105': '엑셀·PPT·업무툴', '1106': '엑셀·PPT·업무툴', '1101': '개발·UX', '1102': '개발·UX', '1107': '개발·UX',
+  '1108': '개발·UX', '1110': '개발·UX', '1112': '개발·UX', '1301': '의학·치과', '1302': '의학·치과'
+};
+function viewOf_(c) { var m = settings_().viewMap || {}; return m[c.code] || VIEW_DEFAULT[c.code] || c.name; }
+function setCategoryView_(code, view) {
+  var c = categories_().filter(function (x) { return x.code === String(code); })[0];
+  if (!c) throw new AppError('분류를 찾을 수 없습니다.');
+  var s = settings_(); s.viewMap = s.viewMap || {};
+  view = String(view || '').trim().slice(0, 30);
+  if (view && view !== VIEW_DEFAULT[c.code]) s.viewMap[c.code] = view; else delete s.viewMap[c.code];
+  saveSettings_(s); _cats = null;
+  return { ok: true, view: viewOf_(c) };
+}
+function categories_() {
+  if (_cats) return _cats;
+  var list = rows_('categories').filter(function (c) { return /^\d{3,4}$/.test(c.code); });
+  list.forEach(function (c) { c.group = groupOf_(c.code); c.isGroup = c.code.slice(-2) === '00'; c.view = c.isGroup ? c.name : viewOf_(c); });
+  list.sort(function (a, b) { return Number(a.code) - Number(b.code); });
+  _cats = list;
+  return list;
+}
+function catName_(code) { var c = categories_().filter(function (x) { return x.code === String(code); })[0]; return c ? c.name : ''; }
+function groupName_(code) { return catName_(groupOf_(code)); }
+function leafCategories_() {
+  var cats = categories_();
+  return cats.filter(function (c) { return !c.isGroup || !cats.some(function (x) { return x.group === c.code && !x.isGroup; }); });
+}
+
+// KDC(한국십진분류) / ISBN 부가기호 → 오스템 분류
+function mapKDC_(kdcRaw) {
+  if (!kdcRaw) return null;
+  var s = String(kdcRaw).replace(/[^0-9.]/g, '');
+  if (!s) return null;
+  var k = Math.floor(parseFloat(s));
+  function r(leaf, group) { return { leaf: leaf, group: group || (leaf ? groupOf_(leaf) : null) }; }
+  if (k < 100) return (k === 4 || k === 5) ? r('1109') : r('401');
+  if (k < 200) { if (k >= 180 && k < 190) return r('404'); if (k >= 140 && k < 160) return r('409'); if (k >= 160 && k < 180) return r('403'); return r('402'); }
+  if (k < 300) return r(null, '900');
+  if (k < 400) {
+    if (k === 325) return r('130'); if (k === 327) return r('137'); if (k === 326) return r('123');
+    if (k >= 320 && k < 330) return r('125'); if (k >= 330 && k < 340) return r('1005'); if (k === 349) return r('1003');
+    if (k >= 340 && k < 350) return r('1006'); if (k >= 360 && k < 370) return r('1007'); if (k >= 370 && k < 380) return r('1500');
+    if (k >= 380 && k < 390) return r('407'); return r(null, '1000');
+  }
+  if (k < 500) { if (k >= 410 && k < 420) return r('803'); if (k >= 440 && k < 450) return r('805'); if (k >= 470) return r('804'); return r('802'); }
+  if (k < 600) { if (k === 516 || k === 517) return r('1302'); if (k >= 510 && k < 520) return r('1201'); if (k >= 590) return r('1500'); if (k >= 560 && k < 570) return r('1112'); return r(null, '1300'); }
+  if (k < 700) return r('407');
+  if (k < 800) { if (k >= 720 && k < 730) return r('502'); if (k >= 730 && k < 740) return r('503'); if (k >= 740 && k < 750) return r('501'); return r('223'); }
+  if (k < 900) {
+    var lang = Math.floor(k / 10) % 10, form = k % 10;
+    if (k === 802) return r('223');
+    if (form === 1) return r(lang === 1 ? '703' : null, '700');
+    if (form === 3) { if (lang === 1) return r('602'); if (lang === 3) return r('607'); if (lang === 4) return r('604'); if (lang === 5) return r('606'); return r(null, '600'); }
+    if (form === 4 || form === 6 || form === 8) { if (lang === 1) return r('701'); if (lang === 3) return r('704'); if (lang === 4) return r('702'); return r(null, '700'); }
+    return r(null, '600');
+  }
+  if (k === 911) return r('307'); if (k === 913) return r('308'); if (k >= 920 && k < 930) return r('302'); if (k === 909) return r('305');
+  return r('309');
+}
+function kdcFromAddCode_(addCode) { var s = String(addCode || '').replace(/\D/g, ''); return s.length === 5 ? s.slice(2) : null; }
+
+// ===== Classifier.gs =====
+// 자동 분류 + 도서코드 생성
+// 1) 같은 책(ISBN/제목)이 있으면 같은 소분류·구매번호, 권번호 +1
+// 2) 없으면 점수 합산: 기존 장서 제목 유사도 + 같은 저자 + KDC/부가기호 + 분류 키워드
+function normStr_(s) { return String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, '').replace(/[^0-9a-z가-힣]/g, ''); }
+function normTitle_(s) { return normStr_(String(s || '').split(/[:：\-–]/)[0]); }
+function bigrams_(s) { var t = normStr_(s), set = {}; for (var i = 0; i < t.length - 1; i++) set[t.slice(i, i + 2)] = 1; if (t.length === 1) set[t] = 1; return set; }
+function sim_(a, b) {
+  var ka = Object.keys(a), kb = Object.keys(b);
+  if (!ka.length || !kb.length) return 0;
+  var inter = 0; ka.forEach(function (x) { if (b[x]) inter++; });
+  return inter / Math.sqrt(ka.length * kb.length);
+}
+function authorKey_(a) { return normStr_(String(a || '').split(/[,/·]| 외| 지음| 저/)[0]); }
+
+function findSameBook_(books, input) {
+  var i = String(input.isbn || '').replace(/\D/g, ''), t = normTitle_(input.title);
+  return books.filter(function (b) { return b.status !== 'discarded' && ((i && b.isbn === i) || (t && normTitle_(b.title) === t)); });
+}
+
+function classify_(input) {
+  var leafs = leafCategories_();
+  var leafSet = {}; leafs.forEach(function (c) { leafSet[c.code] = c; });
+  var books = rows_('books').filter(function (b) { return b.status !== 'discarded'; });
+  var scores = {}, reasons = {};
+  function add(code, pts, why) { if (!leafSet[code]) return; scores[code] = (scores[code] || 0) + pts; (reasons[code] = reasons[code] || []).push(why); }
+
+  var same = findSameBook_(books, input);
+  if (same.length) add(same[0].catCode, 1000, '이미 보유 중인 도서 (' + same[0].code + ') — 같은 분류로 추가 권 등록');
+
+  var q = bigrams_(input.title);
+  books.map(function (b) { return { b: b, s: sim_(q, bigrams_(b.title)) }; })
+    .filter(function (x) { return x.s > 0.25; }).sort(function (x, y) { return y.s - x.s; }).slice(0, 7)
+    .forEach(function (x) { add(x.b.catCode, Math.round(x.s * 30), '제목 유사: 「' + x.b.title + '」'); });
+
+  var ak = authorKey_(input.author);
+  if (ak && ak.length >= 2) {
+    var seen = {};
+    books.filter(function (b) { return authorKey_(b.author) === ak; }).forEach(function (b) {
+      if (seen[b.catCode]) return; seen[b.catCode] = 1;
+      add(b.catCode, 25, '같은 저자의 보유 도서: 「' + b.title + '」');
+    });
+  }
+
+  var k = mapKDC_(input.kdc);
+  if (k) {
+    if (k.leaf) add(k.leaf, 30, '국립중앙도서관 분류(KDC ' + input.kdc + ')');
+    if (k.group) leafs.forEach(function (c) { if (c.group === k.group && c.code !== k.leaf) add(c.code, 8, 'KDC 대분류 일치'); });
+  }
+
+  var title = String(input.title || '').toLowerCase().replace(/\s/g, '');
+  var desc = String(input.description || '').toLowerCase().replace(/\s/g, '').slice(0, 1500);
+  leafs.forEach(function (c) {
+    (c.keywords || []).forEach(function (kw) {
+      var kwn = kw.replace(/\s/g, '');
+      if (kwn.length < 2 && !/[a-z]/.test(kwn)) return;
+      if (title.indexOf(kwn) >= 0) add(c.code, 12, "제목 키워드 '" + kw + "'");
+      else if (desc.indexOf(kwn) >= 0) add(c.code, 3, "소개글 키워드 '" + kw + "'");
+    });
+  });
+  var cats = (input.categories || []).join(' ').toLowerCase();
+  [[/business|economics|management/, '130'], [/self-help/, '205'], [/psychology/, '404'], [/philosophy/, '402'], [/history/, '309'], [/science/, '802'], [/computers/, '1109'], [/fiction/, '604'], [/medical/, '1201'], [/family|parenting/, '1500']]
+    .forEach(function (p) { if (p[0].test(cats)) add(p[1], 10, "Google Books 분류 '" + input.categories.join(', ') + "'"); });
+
+  var ranked = Object.keys(scores).map(function (code) { return [code, scores[code]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5)
+    .map(function (p) {
+      var uniq = []; reasons[p[0]].forEach(function (r) { if (uniq.indexOf(r) < 0) uniq.push(r); });
+      return { code: p[0], name: leafSet[p[0]].name, groupName: groupName_(p[0]), score: p[1], reasons: uniq.slice(0, 3) };
+    });
+  var top = ranked.length ? ranked[0].score : 1;
+  ranked.forEach(function (r) { r.confidence = Math.round(r.score / top * 100); });
+  if (input.forceCat && !ranked.some(function (r) { return r.code === String(input.forceCat); }) && leafSet[input.forceCat]) {
+    ranked.push({ code: String(input.forceCat), name: leafSet[input.forceCat].name, groupName: groupName_(input.forceCat), score: 0, confidence: 0, reasons: ['직접 선택'] });
+  }
+  ranked.forEach(function (r) { r.preview = nextCode_(r.code, input, Number(input.count) || 1); });
+  return { candidates: ranked, sameBooks: same.map(function (b) { return { code: b.code, title: b.title }; }) };
+}
+
+// 코드: 소분류-구매번호(3자리)-권번호
+function nextCode_(catCode, input, count) {
+  var inCat = rows_('books').filter(function (b) { return b.catCode === String(catCode); });
+  var same = findSameBook_(inCat, input);
+  var purchaseNo, start;
+  if (same.length) {
+    purchaseNo = same[0].purchaseNo;
+    start = inCat.filter(function (b) { return b.purchaseNo === purchaseNo; }).reduce(function (m, b) { return Math.max(m, Number(b.copyNo) || 0); }, 0) + 1;
+  } else {
+    purchaseNo = ('00' + (inCat.reduce(function (m, b) { return Math.max(m, Number(b.purchaseNo) || 0); }, 0) + 1)).slice(-3);
+    start = 1;
+  }
+  var codes = [];
+  for (var i = 0; i < (count || 1); i++) codes.push({ catCode: String(catCode), purchaseNo: purchaseNo, copyNo: String(start + i), code: catCode + '-' + purchaseNo + '-' + (start + i) });
+  return { codes: codes, isAdditionalCopy: !!same.length };
+}
+
+// ===== Lookup.gs =====
+// 도서정보 조회 + 실제 표지 이미지
+// 키 없이: Google Books + 교보문고 표지(ISBN) / 키가 있으면: 카카오·국립중앙도서관·네이버 추가 (관리 › 설정에서 입력)
+function apiKeys_() {
+  var p = props_();
+  return { kakao: p.getProperty('KAKAO_REST_KEY') || '', nl: p.getProperty('NL_CERT_KEY') || '', naverId: p.getProperty('NAVER_CLIENT_ID') || '', naverSecret: p.getProperty('NAVER_CLIENT_SECRET') || '' };
+}
+function providers_() { var k = apiKeys_(); return { kakao: !!k.kakao, nl: !!k.nl, naver: !!(k.naverId && k.naverSecret), google: true }; }
+
+function stripTags_(s) { return String(s || '').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim(); }
+function isbn13_(s) { var parts = String(s || '').split(/\s+/).map(function (x) { return x.replace(/[^0-9Xx]/g, ''); }); return parts.filter(function (p) { return p.length === 13; })[0] || parts.filter(function (p) { return p.length === 10; })[0] || ''; }
+
+// 여러 요청을 병렬로 보내고 JSON 파싱
+function fetchJsonAll_(reqs) {
+  if (!reqs.length) return [];
+  var res;
+  try { res = UrlFetchApp.fetchAll(reqs.map(function (r) { return { url: r.url, headers: r.headers || {}, muteHttpExceptions: true }; })); } catch (e) { return reqs.map(function () { return null; }); }
+  return res.map(function (x) { try { return x.getResponseCode() === 200 ? JSON.parse(x.getContentText()) : null; } catch (e) { return null; } });
+}
+
+function parseKakao_(j) { return ((j && j.documents) || []).map(function (d) { return { source: 'kakao', title: d.title, author: (d.authors || []).join(', '), publisher: d.publisher, isbn: isbn13_(d.isbn), pubDate: String(d.datetime || '').slice(0, 10), cover: d.thumbnail, description: stripTags_(d.contents) }; }); }
+function parseNl_(j) { return ((j && j.docs) || []).map(function (d) { return { source: 'nl', title: d.TITLE, author: d.AUTHOR, publisher: d.PUBLISHER, isbn: d.EA_ISBN, pubDate: String(d.PUBLISH_PREDATE || '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'), cover: d.TITLE_URL, description: '', kdc: d.KDC || kdcFromAddCode_(d.EA_ADD_CODE) }; }); }
+function parseNaver_(j) { return ((j && j.items) || []).map(function (d) { return { source: 'naver', title: stripTags_(d.title), author: stripTags_(d.author).replace(/\^/g, ', '), publisher: stripTags_(d.publisher), isbn: isbn13_(d.isbn), pubDate: String(d.pubdate || '').replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'), cover: d.image, description: stripTags_(d.description) }; }); }
+function parseGoogle_(j) {
+  return ((j && j.items) || []).map(function (it) {
+    var v = it.volumeInfo || {};
+    var id13 = (v.industryIdentifiers || []).filter(function (x) { return x.type === 'ISBN_13'; })[0];
+    return { source: 'google', title: [v.title, v.subtitle].filter(Boolean).join(': '), author: (v.authors || []).join(', '), publisher: v.publisher || '', isbn: id13 ? id13.identifier : '', pubDate: v.publishedDate || '', cover: String((v.imageLinks || {}).thumbnail || '').replace('http://', 'https://'), description: v.description || '', categories: v.categories || [] };
+  });
+}
+
+function bookRequests_(input) {
+  var k = apiKeys_();
+  var isbn = String(input.isbn || '').replace(/\D/g, '');
+  var q = isbn.length >= 10 ? isbn : [input.title, input.author].filter(Boolean).join(' ');
+  var reqs = [];
+  if (k.kakao) reqs.push({ p: parseKakao_, url: 'https://dapi.kakao.com/v3/search/book?size=10&target=' + (isbn.length >= 10 ? 'isbn' : 'title') + '&query=' + encodeURIComponent(isbn.length >= 10 ? isbn : input.title), headers: { Authorization: 'KakaoAK ' + k.kakao } });
+  if (k.nl) reqs.push({ p: parseNl_, url: 'https://www.nl.go.kr/seoji/SearchApi.do?cert_key=' + encodeURIComponent(k.nl) + '&result_style=json&page_no=1&page_size=10&' + (isbn.length >= 10 ? 'isbn=' + isbn : 'title=' + encodeURIComponent(input.title)) });
+  if (k.naverId && k.naverSecret) reqs.push({ p: parseNaver_, url: 'https://openapi.naver.com/v1/search/book.json?display=10&query=' + encodeURIComponent(q), headers: { 'X-Naver-Client-Id': k.naverId, 'X-Naver-Client-Secret': k.naverSecret } });
+  reqs.push({ p: parseGoogle_, url: 'https://www.googleapis.com/books/v1/volumes?maxResults=10&q=' + encodeURIComponent(isbn.length >= 10 ? 'isbn:' + isbn : 'intitle:' + input.title + (input.author ? ' inauthor:' + String(input.author).split(',')[0] : '')) });
+  return reqs;
+}
+
+function searchBooks_(input) {
+  var reqs = bookRequests_(input);
+  var out = fetchJsonAll_(reqs);
+  var all = [];
+  out.forEach(function (j, i) { all = all.concat(reqs[i].p(j)); });
+  // ISBN 기준으로 합치기 (빈 필드는 다른 출처로 채움)
+  var map = {}, order = [];
+  all.forEach(function (r) {
+    var key = r.isbn || r.title;
+    if (!map[key]) { map[key] = r; order.push(key); }
+    else Object.keys(r).forEach(function (f) { if (!map[key][f] && r[f]) map[key][f] = r[f]; });
+  });
+  var n = function (s) { return String(s || '').replace(/\s/g, '').toLowerCase(); };
+  var score = function (r) { return (input.author && n(r.author).indexOf(n(input.author).slice(0, 3)) >= 0 ? 2 : 0) + (input.publisher && n(r.publisher).indexOf(n(input.publisher)) >= 0 ? 2 : 0) + (n(r.title) === n(input.title) ? 3 : 0) + (r.source === 'kakao' ? 1 : 0); };
+  var list = order.map(function (k) { return map[k]; });
+  list.forEach(function (r) { if (r.isbn && (!r.cover || r.source === 'google')) r.coverCandidate = kyoboCover_(r.isbn); });
+  return list.sort(function (a, b) { return score(b) - score(a); });
+}
+
+// 원본 시트에 바코드(ISBN)가 없는 책: 제목·출판사·저자로 찾아서 확실할 때만 ISBN·표지를 채움
+//   (카카오·네이버·국립중앙도서관 키가 있을 때 정확도가 높고, 없으면 Google Books만 사용)
+function fillByTitle_(limit) {
+  var books = rows_('books').filter(function (b) { return !b.isbn && !b.cover && !b.coverCheckedAt && b.status !== 'discarded' && b.title; });
+  var byTitle = {}; books.forEach(function (b) { var k = titleKey_(b); (byTitle[k] = byTitle[k] || []).push(b); });
+  var keys = Object.keys(byTitle).slice(0, limit || 20);
+  var n = function (s) { return String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, '').replace(/[^0-9a-z가-힣]/g, ''); };
+  var found = 0, changed = [], stamp = today_();
+  keys.forEach(function (k) {
+    var b0 = byTitle[k][0], hit = null;
+    try {
+      var main = String(b0.title).split(/[:：]/)[0];
+      hit = searchBooks_({ title: main, author: String(b0.author || '').split(/[,\s]/)[0], publisher: b0.publisher }).filter(function (r) {
+        var sc = 0;
+        if (n(r.title).indexOf(n(main)) === 0) sc += 3;
+        if (b0.publisher && n(r.publisher).indexOf(n(b0.publisher).slice(0, 2)) >= 0) sc += 2;
+        if (b0.author && n(r.author).indexOf(n(String(b0.author).split(/[,\s]/)[0])) >= 0) sc += 2;
+        return r.isbn && String(r.isbn).length === 13 && sc >= 5; // 제목 + (출판사 또는 저자)가 맞아야 채움
+      })[0] || null;
+    } catch (e) { hit = null; }
+    byTitle[k].forEach(function (b) {
+      if (hit) { b.isbn = hit.isbn; b.cover = hit.cover && hit.source !== 'google' ? hit.cover : kyoboCover_(hit.isbn); if (!b.description && hit.description) b.description = String(hit.description).slice(0, 3000); }
+      b.coverCheckedAt = stamp; changed.push(b);
+    });
+    if (hit) found++;
+  });
+  save_('books', changed);
+  return { checked: keys.length, found: found, remaining: Object.keys(byTitle).length - keys.length };
+}
+
+function kyoboCover_(isbn) { return 'https://contents.kyobobook.co.kr/sih/fit-in/458x0/pdt/' + isbn + '.jpg'; }
+function links_(isbn, title) {
+  return { kyobo: 'https://search.kyobobook.co.kr/search?keyword=' + encodeURIComponent(isbn || title), nl: 'https://www.nl.go.kr/NL/contents/search.do?srchTarget=total&kwd=' + encodeURIComponent(isbn || title) };
+}
+
+// 이미지 URL이 실제 이미지인지 확인 (교보 → 카카오/구글 순)
+function isImage_(resp) {
+  if (!resp || resp.getResponseCode() !== 200) return false;
+  var h = resp.getHeaders(); var ct = String(h['Content-Type'] || h['content-type'] || '');
+  return /^image\//.test(ct) && resp.getBlob().getBytes().length > 2000;
+}
+
+// 표지가 비어 있는 도서를 묶음으로 확인해 표지URL 저장 (매일 자동 + 관리자 버튼)
+function fillCovers_(limit) {
+  var books = rows_('books').filter(function (b) { return b.isbn && !b.cover && !b.coverCheckedAt && b.status !== 'discarded'; });
+  var byIsbn = {}; books.forEach(function (b) { (byIsbn[b.isbn] = byIsbn[b.isbn] || []).push(b); });
+  var isbns = Object.keys(byIsbn).slice(0, limit || 120);
+  var noIsbn = fillByTitle_(20);
+  if (!isbns.length) return { checked: noIsbn.checked, found: noIsbn.found, remaining: noIsbn.remaining, isbnFilled: noIsbn.found };
+  var resp;
+  try { resp = UrlFetchApp.fetchAll(isbns.map(function (i) { return { url: kyoboCover_(i), muteHttpExceptions: true, followRedirects: true }; })); } catch (e) { resp = []; }
+  var found = 0, missing = [];
+  isbns.forEach(function (isbn, i) {
+    if (isImage_(resp[i])) { byIsbn[isbn].forEach(function (b) { b.cover = kyoboCover_(isbn); }); found++; }
+    else missing.push(isbn);
+  });
+  // 교보에 없으면 카카오(키 있을 때) → Google Books 표지
+  if (missing.length) {
+    var k = apiKeys_();
+    var reqs = missing.map(function (isbn) {
+      return k.kakao ? { url: 'https://dapi.kakao.com/v3/search/book?target=isbn&query=' + isbn, headers: { Authorization: 'KakaoAK ' + k.kakao }, p: parseKakao_ }
+        : { url: 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn, p: parseGoogle_ };
+    });
+    var js = fetchJsonAll_(reqs);
+    missing.forEach(function (isbn, i) {
+      var r = reqs[i].p(js[i])[0];
+      if (r && r.cover) { byIsbn[isbn].forEach(function (b) { b.cover = r.cover; if (!b.description && r.description) b.description = String(r.description).slice(0, 3000); }); found++; }
+    });
+  }
+  var stamp = today_();
+  var changed = [];
+  isbns.forEach(function (isbn) { byIsbn[isbn].forEach(function (b) { b.coverCheckedAt = stamp; changed.push(b); }); });
+  save_('books', changed);
+  var remaining = Object.keys(byIsbn).length - isbns.length;
+  return { checked: isbns.length + noIsbn.checked, found: found + noIsbn.found, remaining: remaining + noIsbn.remaining, isbnFilled: noIsbn.found };
+}
+
+// 상세 화면에서 소개글이 없으면 1회 조회해 저장
+function enrichOnce_(books) {
+  var first = books[0];
+  if (!first.isbn || first.description || books.some(function (b) { return /^info:/.test(b.kdc); })) return;
+  var reqs = bookRequests_({ isbn: first.isbn });
+  var js = fetchJsonAll_(reqs);
+  var all = []; js.forEach(function (j, i) { all = all.concat(reqs[i].p(j)); });
+  var info = {}; all.forEach(function (r) { ['cover', 'description', 'pubDate', 'kdc'].forEach(function (f) { if (!info[f] && r[f]) info[f] = r[f]; }); });
+  books.forEach(function (b) {
+    if (!b.cover && info.cover) b.cover = info.cover;
+    if (!b.description && info.description) b.description = String(info.description).slice(0, 3000);
+    if (!b.pubDate && info.pubDate) b.pubDate = info.pubDate;
+    b.kdc = 'info:' + (info.kdc || b.kdc || '');
+  });
+  save_('books', books);
+}
+
+// ===== Service.gs =====
+// 업무 로직: 도서·대출·반납·연장·예약 (사번 기반)
+var OPEN = ['active', 'returning'];
+function titleKey_(b) { return b.catCode + '-' + b.purchaseNo; }
+
+// ─── 사원 ───────────────────────────────────────────
+var _empMap = null;
+function empMap_() {
+  if (_empMap) return _empMap;
+  _empMap = {};
+  rows_('employees').forEach(function (e) { var k = normEmp_(e.empNo); if (k) _empMap[k] = e; });
+  return _empMap;
+}
+function employee_(empNo) {
+  var k = normEmp_(empNo);
+  if (!k) throw new AppError('사번을 입력해 주세요.');
+  var e = empMap_()[k];
+  if (!e) throw new AppError('사원명부에 없는 사번입니다. 사번을 확인하시거나 담당자에게 문의해 주세요.');
+  return { empNo: k, name: String(e.name).trim(), team: String(e.team).trim(), email: String(e.email).trim().toLowerCase() };
+}
+function emailOf_(l) { var e = l.empNo && empMap_()[normEmp_(l.empNo)]; return (e && e.email) || l.email || ''; }
+
+// ─── 상태 계산 ──────────────────────────────────────
+function loanView_(l) {
+  var t = today_();
+  var v = {}; Object.keys(l).forEach(function (k) { if (k !== '_r') v[k] = l[k]; });
+  v.dday = l.dueDate ? diffDays_(l.dueDate, t) : null;
+  v.overdue = l.status === 'active' && v.dday !== null && v.dday < 0;
+  v.overdueDays = v.overdue ? -v.dday : 0;
+  v.waitingPickup = l.status === 'active' && !!l.pickupDate && t < l.pickupDate;
+  // 소속·이름은 사원명부(현재 기준)를 우선 표시. 대출 당시 소속은 teamAtLoan으로 보존
+  var e = l.empNo && empMap_()[normEmp_(l.empNo)];
+  if (e) {
+    var tn = String(e.team || '').trim(), nn = String(e.name || '').trim();
+    if (nn) v.name = nn;
+    if (tn && tn !== String(l.team || '').trim()) { v.teamAtLoan = l.team; v.team = tn; }
+  }
+  v.statusLabel = { active: v.overdue ? '연체 ' + v.overdueDays + '일' : v.waitingPickup ? '수령대기' : '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실' }[l.status] || l.status;
+  return v;
+}
+function openByCode_() { var m = {}; rows_('loans').forEach(function (l) { if (OPEN.indexOf(l.status) >= 0) m[l.bookCode] = l; }); return m; }
+function bookState_(b, open) {
+  if (b.status === 'lost') return '분실';
+  if (b.status === 'discarded') return '폐기';
+  var l = open[b.code];
+  if (!l) return '대출가능';
+  return l.status === 'returning' ? '반납확인중' : '대출중';
+}
+
+// ─── 카탈로그 (전체를 한 번에 내려주고 검색은 브라우저에서) ──
+function catalog_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cacheGet_(cache, 'catalog_v2');
+  if (hit) return hit;
+  var open = openByCode_();
+  var waiting = {};
+  rows_('reservations').forEach(function (r) { if (r.status === 'waiting') waiting[r.key] = (waiting[r.key] || 0) + 1; });
+  var newSince = addDays_(today_(), -settings_().newBookDays);
+  var map = {}, order = [];
+  rows_('books').forEach(function (b) {
+    if (b.status === 'discarded' || !b.code) return;
+    var k = titleKey_(b);
+    if (!map[k]) {
+      map[k] = { key: k, title: b.title, author: b.author, publisher: b.publisher, isbn: b.isbn, cover: b.cover || '', catCode: b.catCode,
+        catName: catName_(b.catCode), group: groupOf_(b.catCode), copies: 0, available: 0, loanCount: 0, createdAt: b.createdAt || '', earliestDue: '', codes: [] };
+      order.push(k);
+    }
+    var t = map[k];
+    t.codes.push(b.code);
+    if (!t.isbn && b.isbn) t.isbn = b.isbn;
+    if (b.status === 'lost') return;
+    t.copies++;
+    t.loanCount += Number(b.loanCount) || 0;
+    if (!t.cover && b.cover) t.cover = b.cover;
+    if ((b.createdAt || '') > t.createdAt) t.createdAt = b.createdAt;
+    var st = bookState_(b, open);
+    if (st === '대출가능') t.available++;
+    else { var l = open[b.code]; if (l && (!t.earliestDue || l.dueDate < t.earliestDue)) t.earliestDue = l.dueDate; }
+  });
+  var list = order.map(function (k) { var t = map[k]; t.isNew = !!t.createdAt && t.createdAt.slice(0, 10) >= newSince; t.waiting = waiting[k] || 0; return t; })
+    .filter(function (t) { return t.copies > 0; });
+  var out = { items: list, groups: categories_().map(function (c) { return { code: c.code, name: c.name, group: c.group, isGroup: c.isGroup, view: c.view }; }) };
+  cachePut_(cache, 'catalog_v2', out, 600);
+  return out;
+}
+
+// 100KB 제한을 넘는 값을 여러 조각으로 캐시
+function cachePut_(cache, key, obj, ttl) {
+  try {
+    var s = JSON.stringify(obj), size = 90000, n = Math.ceil(s.length / size), m = {};
+    for (var i = 0; i < n; i++) m[key + '_' + i] = s.slice(i * size, (i + 1) * size);
+    m[key] = String(n);
+    cache.putAll(m, ttl);
+  } catch (e) {}
+}
+function cacheGet_(cache, key) {
+  try {
+    var n = Number(cache.get(key)); if (!n) return null;
+    var keys = []; for (var i = 0; i < n; i++) keys.push(key + '_' + i);
+    var parts = cache.getAll(keys); var s = '';
+    for (var j = 0; j < n; j++) { if (parts[keys[j]] == null) return null; s += parts[keys[j]]; }
+    return JSON.parse(s);
+  } catch (e) { return null; }
+}
+
+function titleDetail_(key) {
+  var books = rows_('books').filter(function (b) { return titleKey_(b) === key && b.status !== 'discarded'; });
+  if (!books.length) throw new AppError('도서를 찾을 수 없습니다.');
+  try { enrichOnce_(books); } catch (e) {}
+  var open = openByCode_();
+  var first = books[0];
+  var pick = function (f) { var b = books.filter(function (x) { return x[f]; })[0]; return b ? b[f] : ''; };
+  var copies = books.map(function (b) { var l = open[b.code]; return { code: b.code, status: bookState_(b, open), dueDate: l ? l.dueDate : '' }; });
+  return {
+    key: key, title: first.title, author: first.author, publisher: first.publisher, isbn: pick('isbn'), cover: pick('cover'), description: pick('description'),
+    pubDate: pick('pubDate'), catCode: first.catCode, catName: catName_(first.catCode), groupName: groupName_(first.catCode), group: groupOf_(first.catCode),
+    copies: copies, available: copies.filter(function (c) { return c.status === '대출가능'; }).length,
+    waiting: rows_('reservations').filter(function (r) { return r.key === key && r.status === 'waiting'; }).length,
+    loanCount: books.reduce(function (s, b) { return s + (Number(b.loanCount) || 0); }, 0), links: links_(pick('isbn'), first.title),
+    together: alsoBorrowed_(key),
+  };
+}
+
+// 이 책을 빌린 사람들이 함께 많이 빌린 책 (대출 기록만으로 셈, 누가 빌렸는지는 내보내지 않음)
+function alsoBorrowed_(key) {
+  try {
+    var loans = rows_('loans').filter(function (l) { return l.status !== 'cancelled' && l.status !== 'rejected'; });
+    var who = function (l) { return l.empNo || (l.name ? l.name + '|' + l.team : ''); };
+    var readers = {};
+    loans.forEach(function (l) { if (l.titleKey === key && who(l)) readers[who(l)] = 1; });
+    var n = {}, people = {};
+    loans.forEach(function (l) {
+      var w = who(l); if (!w || !readers[w] || l.titleKey === key) return;
+      var k2 = w + '#' + l.titleKey; if (people[k2]) return; people[k2] = 1;
+      n[l.titleKey] = (n[l.titleKey] || 0) + 1;
+    });
+    var items = catalog_().items, byKey = {}; items.forEach(function (t) { byKey[t.key] = t; });
+    return Object.keys(n).filter(function (k) { return n[k] >= 2 && byKey[k]; })
+      .sort(function (a, b) { return n[b] - n[a] || (byKey[b].loanCount - byKey[a].loanCount); }).slice(0, 4)
+      .map(function (k) { var t = byKey[k]; return { key: k, title: t.title, author: t.author, isbn: t.isbn, cover: t.cover, catName: t.catName, available: t.available, copies: t.copies, earliestDue: t.earliestDue }; });
+  } catch (e) { return []; }
+}
+
+// ─── 사번 확인 (신청 전 본인 확인용) ─────────────────
+function whoAmI_(empNo) {
+  var e = employee_(empNo);
+  return { empNo: e.empNo, name: e.name, team: e.team, emailMasked: maskEmail_(e.email), hasEmail: !!e.email };
+}
+
+// ─── 대출 신청 ──────────────────────────────────────
+function nextLoanNo_() { return rows_('loans').reduce(function (m, l) { return Math.max(m, Number(l.no) || 0); }, 0) + 1; }
+
+function createLoan_(book, who, appliedDate, by) {
+  var s = settings_();
+  var pickup = nextBizDay_(appliedDate, s.holidays);
+  var loan = {
+    id: uid_(), no: nextLoanNo_(), bookCode: book.code, titleKey: titleKey_(book), bookTitle: book.title,
+    empNo: who.empNo, name: who.name, team: who.team, email: who.email, appliedAt: nowIso_(),
+    loanDate: appliedDate, pickupDate: pickup, dueDate: toBizDay_(addDays_(pickup, s.loanDays), s.holidays),
+    status: 'active', extensions: [], extensionRequest: null, memo: '', createdBy: by,
+  };
+  book.loanCount = (Number(book.loanCount) || 0) + 1;
+  save_('loans', loan);
+  save_('books', book);
+  return loan;
+}
+
+function applyLoan_(key, empNo) {
+  var who = employee_(empNo);
+  var s = settings_();
+  var mine = rows_('loans').filter(function (l) { return normEmp_(l.empNo) === who.empNo && OPEN.indexOf(l.status) >= 0; }).map(loanView_);
+  if (s.blockWhenOverdue && mine.some(function (l) { return l.overdue; })) throw new AppError('연체 중인 도서가 있어 신규 대출이 제한됩니다. 먼저 반납해 주세요.');
+  if (mine.length >= s.maxLoansPerUser) throw new AppError('1인당 최대 ' + s.maxLoansPerUser + '권까지 대출할 수 있습니다.');
+  if (mine.some(function (l) { return l.titleKey === key; })) throw new AppError('이미 대출 중인 도서입니다.');
+  var open = openByCode_();
+  var book = rows_('books').filter(function (b) { return titleKey_(b) === key; })
+    .sort(function (a, b) { return Number(a.copyNo) - Number(b.copyNo); })
+    .filter(function (b) { return bookState_(b, open) === '대출가능'; })[0];
+  if (!book) throw new AppError('지금은 대출 가능한 권이 없습니다. 예약을 이용해 주세요.');
+  var queue = rows_('reservations').filter(function (r) { return r.key === key && r.status === 'waiting'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
+  if (queue.length && normEmp_(queue[0].empNo) !== who.empNo) throw new AppError('예약 대기자가 있는 도서입니다. 예약을 이용해 주세요.');
+  if (queue.length) { queue[0].status = 'fulfilled'; save_('reservations', queue[0]); }
+  var loan = createLoan_(book, who, today_(), 'user');
+  notify_('applied', [loan]);
+  return loanView_(loan);
+}
+
+// ─── 내 대출 (사번 조회) ─────────────────────────────
+function myPage_(empNo) {
+  var who = employee_(empNo);
+  var loans = rows_('loans').filter(function (l) { return normEmp_(l.empNo) === who.empNo; }).map(loanView_)
+    .sort(function (a, b) { return (b.appliedAt || b.loanDate) > (a.appliedAt || a.loanDate) ? 1 : -1; });
+  var active = loans.filter(function (l) { return OPEN.indexOf(l.status) >= 0; });
+  var cat = catalog_().items;
+  var myRes = rows_('reservations').filter(function (r) { return normEmp_(r.empNo) === who.empNo && r.status === 'waiting'; }).map(function (r) {
+    var q = rows_('reservations').filter(function (x) { return x.key === r.key && x.status === 'waiting'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
+    var t = cat.filter(function (x) { return x.key === r.key; })[0];
+    return { id: r.id, key: r.key, title: r.title, createdAt: r.createdAt, rank: q.map(function (x) { return x.id; }).indexOf(r.id) + 1, availableNow: !!(t && t.available > 0 && q[0].id === r.id), cover: t ? t.cover : '', isbn: t ? t.isbn : '', catCode: t ? t.catCode : '' };
+  });
+  var bookMap = {}; cat.forEach(function (t) { bookMap[t.key] = t; });
+  loans.forEach(function (l) { var t = bookMap[l.titleKey]; l.cover = t ? t.cover : ''; l.isbn = t ? t.isbn : ''; l.email = ''; });
+  var alerts = [];
+  active.forEach(function (l) {
+    if (l.overdue) alerts.push({ level: 'danger', text: '「' + l.bookTitle + '」 반납예정일(' + pretty_(l.dueDate) + ')이 ' + l.overdueDays + '일 지났습니다. 빠른 반납 부탁드립니다.' });
+    else if (l.status === 'active' && l.dday <= 3) alerts.push({ level: 'warn', text: '「' + l.bookTitle + '」 반납예정일이 ' + (l.dday === 0 ? '오늘' : l.dday + '일 후') + '(' + pretty_(l.dueDate) + ')입니다.' });
+    if (l.waitingPickup) alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 ' + pretty_(l.pickupDate) + ' 14:00 이후 대출도서 칸에서 수령하세요.' });
+    if (l.extensionRequest && l.extensionRequest.status === 'pending') alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 연장 신청이 담당자 승인 대기 중입니다.' });
+  });
+  myRes.forEach(function (r) { if (r.availableNow) alerts.push({ level: 'success', text: '예약하신 「' + r.title + '」을(를) 지금 대출 신청할 수 있습니다.', key: r.key }); });
+  return { me: { empNo: who.empNo, name: who.name, team: who.team, emailMasked: maskEmail_(who.email) }, active: active, history: loans.filter(function (l) { return OPEN.indexOf(l.status) < 0; }).slice(0, 30), reservations: myRes, alerts: alerts };
+}
+
+function ownLoan_(loanId, empNo) {
+  var who = employee_(empNo);
+  var l = rows_('loans').filter(function (x) { return x.id === loanId; })[0];
+  if (!l || normEmp_(l.empNo) !== who.empNo) throw new AppError('대출 정보를 찾을 수 없습니다.');
+  return l;
+}
+
+function requestReturn_(loanId, empNo) {
+  var l = ownLoan_(loanId, empNo);
+  if (l.status !== 'active') throw new AppError('반납 등록할 수 없는 상태입니다.');
+  l.status = 'returning';
+  l.returnRequestedAt = nowIso_();
+  save_('loans', l);
+  if (settings_().autoConfirmReturn) confirmReturn_([l.id], '자동확인');
+  return loanView_(l);
+}
+
+function canExtend_(l) {
+  var s = settings_(), v = loanView_(l);
+  if (l.status !== 'active') return '대출 중인 도서만 연장할 수 있습니다.';
+  if (v.overdue) return '연체된 도서는 연장할 수 없습니다. 반납 후 다시 신청해 주세요.';
+  if ((l.extensions || []).length >= s.maxExtensions) return '연장은 ' + s.maxExtensions + '회까지 가능합니다. 더 필요하시면 반납 후 다시 신청해 주세요.';
+  if (rows_('reservations').some(function (r) { return r.key === l.titleKey && r.status === 'waiting'; })) return '예약 대기자가 있어 연장할 수 없습니다.';
+  return null;
+}
+function doExtend_(l, by) {
+  var s = settings_();
+  var nd = toBizDay_(addDays_(l.dueDate, s.extendDays), s.holidays);
+  l.extensions = (l.extensions || []).concat([{ at: nowIso_(), from: l.dueDate, to: nd, by: by }]);
+  l.dueDate = nd;
+  if (l.extensionRequest) l.extensionRequest = { at: l.extensionRequest.at, status: 'approved' };
+}
+function requestExtend_(loanId, empNo) {
+  var l = ownLoan_(loanId, empNo);
+  var why = canExtend_(l);
+  if (why) throw new AppError(why);
+  if (l.extensionRequest && l.extensionRequest.status === 'pending') throw new AppError('이미 연장 신청 중입니다.');
+  l.extensionRequest = { at: nowIso_(), status: 'pending' };
+  if (settings_().autoApproveExtension) {
+    doExtend_(l, 'auto');
+    save_('loans', l);
+    notify_('extended', [l]);
+    var v = loanView_(l); v.autoApproved = true; return v;
+  }
+  save_('loans', l);
+  return loanView_(l);
+}
+
+function reserve_(key, empNo) {
+  var who = employee_(empNo);
+  var t = catalog_().items.filter(function (x) { return x.key === key; })[0];
+  if (!t) throw new AppError('도서를 찾을 수 없습니다.');
+  if (t.available > 0 && !t.waiting) throw new AppError('지금 바로 대출 신청할 수 있는 도서입니다.');
+  if (rows_('loans').some(function (l) { return normEmp_(l.empNo) === who.empNo && l.titleKey === key && OPEN.indexOf(l.status) >= 0; })) throw new AppError('이미 대출 중인 도서입니다.');
+  if (rows_('reservations').some(function (r) { return normEmp_(r.empNo) === who.empNo && r.key === key && r.status === 'waiting'; })) throw new AppError('이미 예약한 도서입니다.');
+  var r = { id: uid_(), key: key, title: t.title, empNo: who.empNo, name: who.name, team: who.team, email: who.email, createdAt: nowIso_(), status: 'waiting', notifiedAt: '' };
+  save_('reservations', r);
+  return { id: r.id, title: r.title, rank: rows_('reservations').filter(function (x) { return x.key === key && x.status === 'waiting'; }).length };
+}
+
+function cancelReservation_(id, empNo, admin) {
+  var r = rows_('reservations').filter(function (x) { return x.id === id; })[0];
+  if (!r || (!admin && normEmp_(r.empNo) !== employee_(empNo).empNo)) throw new AppError('예약 정보를 찾을 수 없습니다.');
+  r.status = 'cancelled';
+  save_('reservations', r);
+  return { ok: true };
+}
+
+// ─── 관리자 ─────────────────────────────────────────
+function confirmReturn_(ids, adminName) {
+  var done = [];
+  rows_('loans').forEach(function (l) {
+    if (ids.indexOf(l.id) >= 0 && OPEN.indexOf(l.status) >= 0) { l.status = 'returned'; l.returnedAt = today_(); l.returnedBy = adminName || '관리자'; done.push(l); }
+  });
+  save_('loans', done);
+  var keys = {}; done.forEach(function (l) { keys[l.titleKey] = 1; });
+  Object.keys(keys).forEach(function (k) {
+    var q = rows_('reservations').filter(function (r) { return r.key === k && r.status === 'waiting'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
+    if (q.length && !q[0].notifiedAt) { q[0].notifiedAt = nowIso_(); save_('reservations', q[0]); notify_('reservationReady', [], { reservation: q[0] }); }
+  });
+  return { count: done.length };
+}
+
+function findLoan_(id) { var l = rows_('loans').filter(function (x) { return x.id === id; })[0]; if (!l) throw new AppError('대출 정보를 찾을 수 없습니다.'); return l; }
+
+function adminExtend_(id, approve) {
+  var l = findLoan_(id);
+  if (!approve) {
+    if (l.extensionRequest) l.extensionRequest = { at: l.extensionRequest.at, status: 'rejected' };
+    save_('loans', l); notify_('extensionRejected', [l]); return loanView_(l);
+  }
+  if (l.status !== 'active') throw new AppError('대출 중인 도서만 연장할 수 있습니다.');
+  doExtend_(l, 'admin'); save_('loans', l); notify_('extended', [l]);
+  return loanView_(l);
+}
+
+function setLoanStatus_(id, status) {
+  var l = findLoan_(id);
+  l.status = status; save_('loans', l);
+  if (status === 'lost') { var b = rows_('books').filter(function (x) { return x.code === l.bookCode; })[0]; if (b) { b.status = 'lost'; save_('books', b); } }
+  return loanView_(l);
+}
+
+function updateLoan_(id, patch) {
+  var l = findLoan_(id);
+  if (patch.empNo !== undefined) {
+    var e = employee_(patch.empNo);
+    l.empNo = e.empNo; l.name = e.name; l.team = e.team; l.email = e.email;
+  }
+  ['dueDate', 'memo'].forEach(function (k) { if (patch[k] !== undefined) l[k] = patch[k]; });
+  save_('loans', l);
+  return loanView_(l);
+}
+
+function adminCreateLoan_(code, empNo, appliedDate) {
+  var who = employee_(empNo);
+  var b = rows_('books').filter(function (x) { return x.code === code; })[0];
+  if (!b) throw new AppError('도서코드를 찾을 수 없습니다.');
+  if (openByCode_()[code]) throw new AppError('이미 대출 중인 권입니다.');
+  var l = createLoan_(b, who, appliedDate || today_(), 'admin');
+  notify_('applied', [l]);
+  return loanView_(l);
+}
+
+function adminLoans_(status, q) {
+  var list = rows_('loans').map(loanView_);
+  if (status === 'open') list = list.filter(function (l) { return OPEN.indexOf(l.status) >= 0; });
+  else if (status === 'overdue') list = list.filter(function (l) { return l.overdue; });
+  else if (status === 'noemp') list = list.filter(function (l) { return OPEN.indexOf(l.status) >= 0 && !emailOf_(l); });
+  else if (status !== 'all') list = list.filter(function (l) { return l.status === status; });
+  if (q) { q = String(q).toLowerCase(); list = list.filter(function (l) { return [l.bookCode, l.bookTitle, l.name, l.team, l.empNo].join(' ').toLowerCase().indexOf(q) >= 0; }); }
+  list.forEach(function (l) { l.mail = emailOf_(l); });
+  return list.sort(function (a, b) { return (Number(b.no) || 0) - (Number(a.no) || 0); }).slice(0, 400);
+}
+
+function dashboard_() {
+  var loans = rows_('loans').map(loanView_);
+  var open = loans.filter(function (l) { return OPEN.indexOf(l.status) >= 0; });
+  open.forEach(function (l) { l.mail = emailOf_(l); });
+  var t = today_();
+  var books = rows_('books').filter(function (b) { return b.status !== 'discarded'; });
+  var titles = {}; books.forEach(function (b) { titles[titleKey_(b)] = 1; });
+  var months = [];
+  for (var i = 11; i >= 0; i--) { var d = new Date(Date.UTC(Number(t.slice(0, 4)), Number(t.slice(5, 7)) - 1 - i, 1)); months.push(d.toISOString().slice(0, 7)); }
+  var monthly = months.map(function (m) { return { month: m, count: loans.filter(function (l) { return String(l.loanDate).slice(0, 7) === m && l.status !== 'cancelled'; }).length }; });
+  var popular = catalog_().items.slice().sort(function (a, b) { return b.loanCount - a.loanCount; }).slice(0, 8).map(function (x) { return { title: x.title, count: x.loanCount }; });
+  var dueSoon = open.filter(function (l) { return l.status === 'active' && !l.overdue && l.dday <= 3; });
+  return {
+    today: t,
+    counts: {
+      books: books.length, titles: Object.keys(titles).length, open: open.filter(function (l) { return l.status === 'active'; }).length,
+      overdue: open.filter(function (l) { return l.overdue; }).length, dueSoon: dueSoon.length,
+      returning: open.filter(function (l) { return l.status === 'returning'; }).length,
+      extensionPending: open.filter(function (l) { return l.extensionRequest && l.extensionRequest.status === 'pending'; }).length,
+      noEmail: open.filter(function (l) { return !l.mail; }).length,
+      thisMonth: loans.filter(function (l) { return String(l.loanDate).slice(0, 7) === t.slice(0, 7) && l.status !== 'cancelled'; }).length,
+      employees: rows_('employees').length,
+      noCover: books.filter(function (b) { return !b.cover; }).length,
+    },
+    overdue: open.filter(function (l) { return l.overdue; }).sort(function (a, b) { return a.dday - b.dday; }),
+    dueSoon: dueSoon.sort(function (a, b) { return a.dday - b.dday; }),
+    returning: open.filter(function (l) { return l.status === 'returning'; }),
+    extensionRequests: open.filter(function (l) { return l.extensionRequest && l.extensionRequest.status === 'pending'; }),
+    reservations: rows_('reservations').filter(function (r) { return r.status === 'waiting'; }).map(function (r) { return { id: r.id, title: r.title, name: r.name, team: r.team, createdAt: r.createdAt }; }),
+    monthly: monthly, popular: popular,
+    mail: { enabled: settings_().mail.enabled, sendHour: settings_().mail.sendHour, lastRun: meta_('lastMailRun') || '', quota: mailQuota_(), triggerOk: triggerInstalled_() },
+  };
+}
+
+function addBooks_(input) {
+  if (!input.title || !String(input.title).trim()) throw new AppError('도서명을 입력해 주세요.');
+  var cat = leafCategories_().filter(function (c) { return c.code === String(input.catCode); })[0];
+  if (!cat) throw new AppError('분류를 선택해 주세요.');
+  var n = Math.max(1, Math.min(20, Number(input.count) || 1));
+  var codes = nextCode_(cat.code, input, n).codes;
+  var now = nowIso_();
+  var isbn = String(input.isbn || '').replace(/\D/g, '');
+  var created = codes.map(function (c) {
+    return { code: c.code, catCode: c.catCode, purchaseNo: c.purchaseNo, copyNo: c.copyNo, title: String(input.title).trim(), author: input.author || '', publisher: input.publisher || '',
+      isbn: isbn, cover: input.cover || '', description: String(input.description || '').slice(0, 3000), pubDate: input.pubDate || '', kdc: input.kdc || '',
+      status: 'active', loanCount: 0, createdAt: now, coverCheckedAt: input.cover ? today_() : '' };
+  });
+  save_('books', created);
+  var fulfilled = 0;
+  try { fulfilled = fulfillRequests_(created); } catch (e) { console.error('fulfillRequests', e); }
+  return created.map(function (b) { return { code: b.code, title: b.title, fulfilled: fulfilled }; });
+}
+
+function updateBook_(code, patch) {
+  var b = rows_('books').filter(function (x) { return x.code === code; })[0];
+  if (!b) throw new AppError('도서를 찾을 수 없습니다.');
+  ['title', 'author', 'publisher', 'isbn', 'cover', 'status'].forEach(function (k) { if (patch[k] !== undefined) b[k] = k === 'isbn' ? String(patch[k]).replace(/\D/g, '') : patch[k]; });
+  if (patch.isbn !== undefined && !patch.cover) { b.cover = ''; b.coverCheckedAt = ''; }
+  save_('books', b);
+  return { ok: true };
+}
+
+function adminBooks_(q) {
+  var open = openByCode_();
+  var list = rows_('books');
+  if (q) { q = String(q).toLowerCase(); list = list.filter(function (b) { return [b.code, b.title, b.author, b.publisher, b.isbn].join(' ').toLowerCase().indexOf(q) >= 0; }); }
+  return list.slice().sort(function (a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : (b.createdAt || '') < (a.createdAt || '') ? -1 : a.code.localeCompare(b.code, undefined, { numeric: true }); })
+    .slice(0, 300).map(function (b) { return { code: b.code, title: b.title, author: b.author, publisher: b.publisher, isbn: b.isbn, cover: b.cover, status: b.status, loanCount: b.loanCount, catName: catName_(b.catCode), groupName: groupName_(b.catCode), state: bookState_(b, open) }; });
+}
+
+function addCategory_(code, name, keywords) {
+  code = String(code || '').trim();
+  if (!/^\d{3,4}$/.test(code)) throw new AppError('분류번호는 3~4자리 숫자입니다.');
+  if (categories_().some(function (c) { return c.code === code; })) throw new AppError('이미 있는 분류번호입니다.');
+  save_('categories', { code: code, name: String(name).trim(), keywords: String(keywords || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(String) });
+  _cats = null;
+  return { ok: true };
+}
+function updateCategory_(code, keywords) {
+  var c = rows_('categories').filter(function (x) { return x.code === code; })[0];
+  if (!c) throw new AppError('분류를 찾을 수 없습니다.');
+  c.keywords = String(keywords || '').split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(String);
+  save_('categories', c);
+  return { ok: true };
+}
+function nextCategoryCode_(group) {
+  var sibs = categories_().filter(function (c) { return c.group === String(group) && !c.isGroup; }).map(function (c) { return Number(c.code); });
+  return String((sibs.length ? Math.max.apply(null, sibs) : Number(group)) + 1);
+}
+
+// ─── 데이터 점검 ─────────────────────────────────────
+// 원본 시트에서 반납 처리가 누락된 기록: 같은 권(도서코드)을 이후에 다른 사람이 빌린 기록이 있는데 아직 '대출중'으로 남은 경우
+function laterLoans_(l, loans) {
+  return loans.filter(function (x) {
+    return x !== l && x.bookCode === l.bookCode && x.status !== 'cancelled' &&
+      (String(x.loanDate) > String(l.loanDate) || (String(x.loanDate) === String(l.loanDate) && Number(x.no) > Number(l.no)));
+  }).sort(function (a, b) { return String(a.loanDate).localeCompare(String(b.loanDate)); });
+}
+function dataCheck_() {
+  var loans = rows_('loans');
+  var open = loans.filter(function (l) { return OPEN.indexOf(l.status) >= 0; });
+  var stale = [];
+  open.forEach(function (l) {
+    var later = laterLoans_(l, loans);
+    if (later.length) { var v = loanView_(l); v.later = later.slice(0, 3).map(function (x) { return { no: x.no, name: x.name, loanDate: x.loanDate, status: loanView_(x).statusLabel }; }); stale.push(v); }
+  });
+  var byCode = {};
+  open.forEach(function (l) { (byCode[l.bookCode] = byCode[l.bookCode] || []).push(l); });
+  var dup = Object.keys(byCode).filter(function (k) { return byCode[k].length > 1; }).map(function (k) { return { bookCode: k, loans: byCode[k].map(loanView_) }; });
+  var noEmp = open.filter(function (l) { return !l.empNo; }).map(loanView_);
+  return { stale: stale, dup: dup, noEmp: noEmp, openCount: open.length };
+}
+function fixStale_(ids, admin) {
+  var loans = rows_('loans'), done = [];
+  [].concat(ids).forEach(function (id) {
+    var l = loans.filter(function (x) { return x.id === id; })[0];
+    if (!l || OPEN.indexOf(l.status) < 0) return;
+    var later = laterLoans_(l, loans);
+    if (!later.length) return;
+    l.status = 'returned';
+    l.returnedAt = later[0].loanDate || today_();
+    l.returnedBy = admin || '자동정리';
+    l.memo = [l.memo, '[' + today_() + ' 데이터 점검: 이후 ' + later[0].name + '님 대출(' + later[0].loanDate + ') 기록이 있어 반납 처리]'].filter(String).join(' ');
+    done.push(l);
+  });
+  save_('loans', done);
+  return { fixed: done.length };
+}
+
+// ─── 내보내기 (CSV) ──────────────────────────────────
+function csv_(rows) {
+  return rows.map(function (r) { return r.map(function (c) { c = c == null ? '' : String(c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n');
+}
+function exportData_(kind) {
+  var t = today_();
+  if (kind === 'books') {
+    var open = openByCode_();
+    var rows = [['도서코드', '분류번호', '분류명', '구매번호', '도서번호', '도서명', '저자', '출판사', 'ISBN', '상태', '현재 대출자', '반납예정일', '누적 대출횟수', '등록일']];
+    rows_('books').forEach(function (b) {
+      var st = bookState_(b, open), l = open[b.code], v = l ? loanView_(l) : null;
+      rows.push([b.code, b.catCode, catName_(b.catCode), b.purchaseNo, b.copyNo, b.title, b.author, b.publisher, b.isbn, v && v.overdue ? '연체' : st, v ? v.name + ' (' + v.team + ')' : '', v ? v.dueDate : '', b.loanCount, String(b.createdAt || '').slice(0, 10)]);
+    });
+    return { name: '오스템문고_도서목록_' + t + '.csv', csv: csv_(rows), count: rows.length - 1 };
+  }
+  if (kind === 'loans') {
+    var rows2 = [['번호', '도서코드', '도서명', '사번', '성명', '현재 소속', '대출 당시 소속', '대출일', '수령일', '반납예정일', '상태', '연체일수', '반납확인일', '반납확인자', '연장횟수', '메모']];
+    rows_('loans').map(loanView_).sort(function (a, b) { return (Number(a.no) || 0) - (Number(b.no) || 0); }).forEach(function (v) {
+      rows2.push([v.no, v.bookCode, v.bookTitle, v.empNo, v.name, v.team, v.teamAtLoan || v.team, v.loanDate, v.pickupDate, v.dueDate, v.statusLabel, v.overdueDays || '', v.returnedAt, v.returnedBy, (v.extensions || []).length || '', v.memo]);
+    });
+    return { name: '오스템문고_대출기록_' + t + '.csv', csv: csv_(rows2), count: rows2.length - 1 };
+  }
+  throw new AppError('알 수 없는 내보내기 종류입니다.');
+}
+
+// ===== Mail.gs =====
+// 메일: 즉시 안내(신청·연장·예약) + 매일 자동 리마인더(반납예정·연체) + 주간 관리자 요약
+function mailQuota_() { try { return MailApp.getRemainingDailyQuota(); } catch (e) { return null; } }
+
+function layout_(title, body, accent) {
+  var s = settings_(); accent = accent || '#d9480f';
+  var url = props_().getProperty('WEBAPP_URL') || '';
+  return '<div style="font-family:\'Noto Sans KR\',\'Malgun Gothic\',\'Apple SD Gothic Neo\',sans-serif;max-width:600px;margin:0 auto;color:#17242c">' +
+    '<div style="border:1px solid #e3e8e6;border-top:4px solid ' + accent + ';padding:22px 24px;background:#fff">' +
+    '<div style="font-size:13px;color:#7b8a92">' + esc_(s.libraryName) + '</div><h2 style="margin:6px 0 16px;font-size:20px">' + title + '</h2>' + body +
+    '<p style="margin-top:24px;font-size:12px;color:#7b8a92;line-height:1.7">📍 ' + esc_(s.location) + '<br>문의: ' + esc_(s.managerName) + (s.managerPhone ? ' · ' + esc_(s.managerPhone) : '') +
+    (url ? '<br><a href="' + url + '" style="color:' + accent + ';font-weight:bold">오스템문고 바로가기 (사번으로 내 대출 확인)</a>' : '') + '</p></div></div>';
+}
+function table_html_(rows, cols) {
+  var th = cols.map(function (c) { return '<th style="text-align:left;padding:8px;border-bottom:1px solid #e3e8e6;font-size:12px;color:#7b8a92">' + c[0] + '</th>'; }).join('');
+  var tr = rows.map(function (r) { return '<tr>' + cols.map(function (c) { return '<td style="padding:8px;border-bottom:1px solid #f1f3f2;font-size:14px">' + c[1](r) + '</td>'; }).join('') + '</tr>'; }).join('');
+  return '<table style="width:100%;border-collapse:collapse"><tr>' + th + '</tr>' + tr + '</table>';
+}
+function bookCell_(l) { return '<b>' + esc_(l.bookTitle) + '</b> <span style="color:#7b8a92">(' + esc_(l.bookCode) + ')</span>'; }
+
+function sendMail_(o) {
+  var s = settings_();
+  var to = [].concat(o.to || []).filter(Boolean), cc = [].concat(o.cc || []).filter(Boolean);
+  var entry = { at: nowIso_(), type: o.type, to: to, cc: cc, subject: o.subject, status: 'sent', error: '', keys: o.keys || [], html: o.html };
+  if (!to.length) { entry.status = '수신자없음'; entry.error = '사원명부에 이메일이 없습니다'; }
+  else if (!s.mail.enabled) { entry.status = '발송꺼짐'; }
+  else {
+    try {
+      MailApp.sendEmail({ to: to.join(','), cc: cc.join(','), subject: o.subject, htmlBody: o.html, name: s.libraryName, replyTo: s.managerEmail || undefined });
+      entry.status = '발송';
+    } catch (e) { entry.status = '실패'; entry.error = String(e.message || e); }
+  }
+  appendLog_(entry);
+  return entry;
+}
+
+function notify_(kind, loans, extra) {
+  var s = settings_(); var l = loans[0];
+  try {
+    if (kind === 'applied') {
+      sendMail_({ type: '신청확인', to: emailOf_(l), subject: '[' + s.libraryName + '] 대출 신청 완료 – ' + l.bookTitle,
+        html: layout_('대출 신청이 접수되었습니다', '<p>' + esc_(l.name) + '님, 아래 도서의 대출 신청이 완료되었습니다.</p>' +
+          table_html_([l], [['도서', bookCell_], ['수령', function (x) { return pretty_(x.pickupDate) + ' 14:00~18:00'; }], ['반납예정일', function (x) { return '<b>' + pretty_(x.dueDate) + '</b>'; }]]) +
+          '<p style="font-size:14px;line-height:1.8">· ' + esc_(s.location) + ' <b>대출도서 칸</b>에서 직접 수령해 주세요.<br>· 반납할 때는 <b>반납도서 칸</b>에 넣고, 사이트 \'내 대출\'에서 [반납했어요]를 눌러주세요.<br>· 분실 시 실물로 변상합니다.</p>') });
+    } else if (kind === 'extended') {
+      sendMail_({ type: '연장완료', to: emailOf_(l), subject: '[' + s.libraryName + '] 대출 연장 완료 – ' + l.bookTitle,
+        html: layout_('대출 기간이 연장되었습니다', '<p>' + esc_(l.name) + '님, 연장이 완료되었습니다.</p>' + table_html_([l], [['도서', bookCell_], ['새 반납예정일', function (x) { return '<b>' + pretty_(x.dueDate) + '</b>'; }]])) });
+    } else if (kind === 'extensionRejected') {
+      sendMail_({ type: '연장거절', to: emailOf_(l), subject: '[' + s.libraryName + '] 대출 연장 불가 안내 – ' + l.bookTitle,
+        html: layout_('대출 연장이 어렵습니다', '<p>' + esc_(l.name) + '님, 아래 도서는 연장이 어려워 기존 반납예정일까지 반납 부탁드립니다.</p>' + table_html_([l], [['도서', bookCell_], ['반납예정일', function (x) { return '<b>' + pretty_(x.dueDate) + '</b>'; }]]), '#a8660f') });
+    } else if (kind === 'reservationReady') {
+      var r = extra.reservation;
+      var e = empMap_()[normEmp_(r.empNo)];
+      sendMail_({ type: '예약도서', to: (e && e.email) || r.email, subject: '[' + s.libraryName + '] 예약 도서 대출 가능 – ' + r.title,
+        html: layout_('예약하신 도서를 대출할 수 있습니다', '<p>' + esc_(r.name) + '님, 예약하신 <b>「' + esc_(r.title) + '」</b>이(가) 반납되었습니다.</p><p>사이트에서 대출 신청해 주세요. 1순위 예약자에게 우선권이 있습니다.</p>') });
+    }
+  } catch (err) { console.error(err); }
+}
+
+// 오늘 보낼 리마인더 계산 (이미 보낸 안내는 다시 보내지 않음)
+function planReminders_() {
+  var s = settings_(), t = today_();
+  var sent = {}, lastOver = {};
+  columns_('mailLog', ['type', 'status', 'keys']).forEach(function (m) {
+    if (m.type !== '반납안내' || (m.status !== '발송')) return;
+    (m.keys || []).forEach(function (k) {
+      sent[k] = 1;
+      var p = k.split('|');
+      if (p[1] === 'overdue' && (!lastOver[p[0]] || p[2] > lastOver[p[0]])) lastOver[p[0]] = p[2];
+    });
+  });
+  var th = s.mail.dueSoonDays.map(Number).sort(function (a, b) { return a - b; });
+  var byUser = {}, noEmail = [];
+  rows_('loans').forEach(function (raw) {
+    if (raw.status !== 'active') return;
+    var l = loanView_(raw), item = null;
+    if (l.overdue) {
+      var last = lastOver[l.id];
+      if (!last || diffDays_(t, last) >= s.mail.overdueRepeatDays) item = { kind: 'overdue', keys: [l.id + '|overdue|' + t] };
+    } else {
+      var d = th.filter(function (x) { return l.dday <= x && l.dday >= 0; })[0];
+      if (d !== undefined && !sent[l.id + '|due' + d + '|' + l.dueDate]) item = { kind: 'dueSoon', keys: th.filter(function (x) { return x >= d; }).map(function (x) { return l.id + '|due' + x + '|' + l.dueDate; }) };
+    }
+    if (!item) return;
+    var mail = emailOf_(raw);
+    if (!mail) { noEmail.push(l); return; }
+    var u = byUser[mail] = byUser[mail] || { email: mail, name: l.name, overdue: [], dueSoon: [], keys: [] };
+    u[item.kind].push(l); u.keys = u.keys.concat(item.keys);
+  });
+  return { users: Object.keys(byUser).map(function (k) { return byUser[k]; }), noEmail: noEmail };
+}
+
+function runReminders_(force, dryRun) {
+  var s = settings_(), t = today_();
+  if (!force && !isBizDay_(t, s.holidays)) return { skipped: '휴무일' };
+  var plan = planReminders_();
+  if (dryRun) return {
+    plan: plan.users.map(function (u) { return { name: u.name, email: maskEmail_(u.email), overdue: u.overdue.map(function (l) { return l.bookTitle; }), dueSoon: u.dueSoon.map(function (l) { return l.bookTitle + ' (' + (l.dday === 0 ? '오늘' : 'D-' + l.dday) + ')'; }) }; }),
+    noEmail: plan.noEmail.map(function (l) { return l.name + ' · ' + l.bookTitle; }),
+  };
+  var sent = 0;
+  plan.users.forEach(function (u) {
+    var over = u.overdue.length > 0, parts = '';
+    if (over) parts += '<p style="color:#b8322a"><b>반납예정일이 지난 도서</b>가 있습니다. 반납도서 칸에 반납 후 사이트에서 [반납했어요]를 눌러주세요.</p>' +
+      table_html_(u.overdue, [['도서', bookCell_], ['반납예정일', function (x) { return pretty_(x.dueDate); }], ['연체', function (x) { return '<b style="color:#b8322a">' + x.overdueDays + '일</b>'; }]]);
+    if (u.dueSoon.length) parts += '<p style="margin-top:16px"><b>반납예정일이 다가온 도서</b>입니다. 더 읽으셔야 하면 사이트에서 ' + s.extendDays + '일 연장을 신청할 수 있습니다.</p>' +
+      table_html_(u.dueSoon, [['도서', bookCell_], ['반납예정일', function (x) { return '<b>' + pretty_(x.dueDate) + '</b>'; }], ['남은 기간', function (x) { return x.dday === 0 ? '<b>오늘</b>' : 'D-' + x.dday; }]]);
+    var subject = over ? '[' + s.libraryName + '] 연체 도서 반납 요청 (' + u.overdue.length + '권)'
+      : '[' + s.libraryName + '] 반납예정일 안내 – ' + u.dueSoon[0].bookTitle + (u.dueSoon.length > 1 ? ' 외 ' + (u.dueSoon.length - 1) + '권' : '');
+    var e = sendMail_({ type: '반납안내', to: u.email, cc: over && s.mail.ccAdminOnOverdue && s.managerEmail ? [s.managerEmail] : [], subject: subject, keys: u.keys,
+      html: layout_(over ? '연체 도서 반납 요청' : '반납예정일 안내', '<p>' + esc_(u.name) + '님, 안녕하세요.</p>' + parts, over ? '#b8322a' : '#0f5e52') });
+    if (e.status === '발송') sent++;
+  });
+  // 주간 요약: 이번 주 첫 영업일
+  var first = isBizDay_(t, s.holidays);
+  var w = dow_(t);
+  for (var i = 1; i < (w === 0 ? 7 : w) && first; i++) if (isBizDay_(addDays_(t, -i), s.holidays)) first = false;
+  if (s.mail.adminDigest && s.managerEmail && (first || force) && meta_('lastDigest') !== t) {
+    var d = dashboard_();
+    sendMail_({ type: '관리자요약', to: s.managerEmail, subject: '[' + s.libraryName + '] 대출 현황 요약 (' + t + ')',
+      html: layout_('관리자 대출 현황 요약', '<p>대출 중 <b>' + d.counts.open + '</b>건 · 연체 <b style="color:#b8322a">' + d.counts.overdue + '</b>건 · 반납확인 대기 <b>' + d.counts.returning + '</b>건 · 연장승인 대기 <b>' + d.counts.extensionPending + '</b>건 · 이메일 없음 <b>' + d.counts.noEmail + '</b>건</p>' +
+        (d.overdue.length ? '<h3 style="font-size:15px">연체자</h3>' + table_html_(d.overdue, [['성명', function (x) { return esc_(x.name) + ' <span style="color:#7b8a92">' + esc_(x.team) + '</span>'; }], ['도서', bookCell_], ['연체', function (x) { return x.overdueDays + '일'; }]]) : '')) });
+    meta_('lastDigest', t);
+  }
+  meta_('lastMailRun', nowIso_());
+  return { sent: sent, noEmail: plan.noEmail.length };
+}
+
+function appendLog_(entry) {
+  var def = TABLES.mailLog;
+  var sh = db_().getSheetByName(def.sheet);
+  var header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var row = header.map(function (h) { var c = def.cols.filter(function (x) { return x[1] === h; })[0]; return c ? cellIn_(c[0], entry[c[0]]) : ''; });
+  sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
+}
+
+// ===== Setup.gs =====
+// ─────────────────────────────────────────────────────
+// 최초 1회: 편집기 상단에서 함수 'setup' 선택 → [실행]
+//  1) "오스템문고 시스템 DB" 스프레드시트 생성 (탭: 도서·대출·예약·사원명부·분류·메일발송기록)
+//  2) 기존 「2026 오스템문고 대출현황」 시트에서 분류·도서목록·대출현황 이관
+//  3) 매일 자동 메일·표지 수집 트리거 설치
+// ─────────────────────────────────────────────────────
+var OLD_SHEET_ID = '1oorSF_POSPop4FwsyZelLp87agbtel4WkPjP-0nvJNw';
+var INITIAL_ADMIN_PASSWORD = 'osstem-lib-2026';
+
+function setupImpl_() {
+  var p = props_();
+  if (!p.getProperty('ADMIN_PASSWORD')) p.setProperty('ADMIN_PASSWORD', INITIAL_ADMIN_PASSWORD);
+  var id = p.getProperty('DB_ID');
+  var ss;
+  if (id) { ss = SpreadsheetApp.openById(id); }
+  else {
+    ss = SpreadsheetApp.create('오스템문고 시스템 DB');
+    p.setProperty('DB_ID', ss.getId());
+  }
+  _ss = ss;
+  ss.setSpreadsheetTimeZone(TZ);
+  Object.keys(TABLES).forEach(function (k) { ensureSheet_(ss, TABLES[k]); });
+  var first = ss.getSheets()[0];
+  if (first.getName() === '시트1' || first.getName() === 'Sheet1') { if (ss.getSheets().length > 1) ss.deleteSheet(first); }
+  _tables = {};
+  if (!rows_('categories').length) save_('categories', defaultCategories_());
+  _tables = {}; _cats = null;
+  var mig = migrateFromOldSheet_(false);
+  installTriggers_();
+  Logger.log('완료: DB ' + ss.getUrl());
+  Logger.log('이관 결과: ' + JSON.stringify(mig));
+  Logger.log('관리자 비밀번호: ' + p.getProperty('ADMIN_PASSWORD'));
+  return { dbUrl: ss.getUrl(), migrated: mig };
+}
+
+function ensureSheet_(ss, def) {
+  var sh = ss.getSheetByName(def.sheet);
+  if (!sh) sh = ss.insertSheet(def.sheet);
+  var header = def.cols.map(function (c) { return c[1]; });
+  var cur = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
+  if (cur.join('') === '') {
+    sh.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight('bold').setBackground('#ffe8d9');
+    sh.setFrozenRows(1);
+  } else {
+    header.forEach(function (h) { if (cur.indexOf(h) < 0) { sh.getRange(1, sh.getLastColumn() + 1).setValue(h).setFontWeight('bold').setBackground('#ffe8d9'); } });
+  }
+  sh.getRange(1, 1, sh.getMaxRows(), Math.max(sh.getLastColumn(), header.length)).setNumberFormat('@');
+  if (def.sheet === '사원명부' && sh.getLastRow() < 2) {
+    sh.getRange('F1').setValue('← 사번·성명·소속·이메일을 붙여넣으세요. 사번으로 대출/조회하고, 알림은 이 이메일로 발송됩니다.').setFontColor('#a8660f');
+  }
+  return sh;
+}
+
+function installTriggers_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (['dailyJob', 'coverJob', 'sheetSyncJob'].indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('sheetSyncJob').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('dailyJob').timeBased().atHour(Number(settings_().mail.sendHour) || 9).nearMinute(5).everyDays(1).inTimezone(TZ).create();
+  ScriptApp.newTrigger('coverJob').timeBased().everyMinutes(10).create();
+}
+function triggerInstalled_() { try { return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'dailyJob'; }); } catch (e) { return null; } }
+
+// 기존 「2026 오스템문고 대출현황」 시트 자동 반영 (5분마다)
+// 전환 기간에 구글 폼·시트로 대출/반납을 계속 처리해도 새 대출, 반납, 새 책이 사이트에 따라 들어옴
+function sheetSyncJob() {
+  var r = withLock_(function () { return migrateFromOldSheet_(false); });
+  meta_('SYNC_AT', nowIso_());
+  if (r.books || r.loans || r.updated) { meta_('SYNC_CHANGED_AT', nowIso_()); meta_('SYNC_LAST', JSON.stringify(r)); bumpVersion_(); }
+  console.log('sheetSyncJob', JSON.stringify(r));
+  return r;
+}
+function sheetSyncStatus_() {
+  var on = null;
+  try { on = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'sheetSyncJob'; }); } catch (e) {}
+  var last = meta_('SYNC_LAST');
+  return { on: on, at: meta_('SYNC_AT') || '', changedAt: meta_('SYNC_CHANGED_AT') || '', last: last ? JSON.parse(last) : null };
+}
+function setSheetSync_(on) {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'sheetSyncJob') ScriptApp.deleteTrigger(t); });
+  if (on) ScriptApp.newTrigger('sheetSyncJob').timeBased().everyMinutes(5).create();
+  return sheetSyncStatus_();
+}
+
+// 매일 자동 실행: 사원명부 매칭 → 리마인더 메일 → 표지 수집
+function dailyJob() {
+  withLock_(function () {
+    matchEmployees_();
+    try { autoCloseRounds_(); } catch (e) { console.error('autoCloseRounds', e); }
+    var r = runReminders_(false, false);
+    console.log('dailyJob', JSON.stringify(r));
+  });
+  coverJob();
+}
+
+// 표지 수집 (10분마다, 남은 게 없으면 스스로 멈춤)
+function coverJob() {
+  var r = withLock_(function () { return fillCovers_(120); });
+  console.log('coverJob', JSON.stringify(r));
+  if (r.remaining === 0 && r.checked === 0) ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'coverJob') ScriptApp.deleteTrigger(t); });
+  return r;
+}
+
+// 사원명부와 대출/예약 기록 연결 (사번이 비어 있는 이관 기록 → 이름·소속으로 찾기)
+function matchEmployees_() {
+  var emps = rows_('employees');
+  var byName = {};
+  emps.forEach(function (e) { var n = String(e.name || '').trim(); if (n) (byName[n] = byName[n] || []).push(e); });
+  var changed = [];
+  rows_('loans').forEach(function (l) {
+    if (l.empNo || !l.name) return;
+    var c = byName[String(l.name).trim()] || [];
+    if (c.length > 1) c = c.filter(function (e) { return String(e.team).replace(/\s/g, '') === String(l.team).replace(/\s/g, ''); });
+    if (c.length === 1) { l.empNo = normEmp_(c[0].empNo); l.email = c[0].email; changed.push(l); }
+  });
+  save_('loans', changed);
+  return { matched: changed.length };
+}
+
+// 기존 시트에서 이관 (같은 도서코드/번호는 갱신)
+function migrateFromOldSheet_(overwrite) {
+  var old = SpreadsheetApp.openById(OLD_SHEET_ID);
+  var res = { categories: 0, books: 0, loans: 0 };
+  // 분류
+  var catSh = old.getSheetByName('오스템도서분류');
+  if (catSh) {
+    var have = {}; rows_('categories').forEach(function (c) { have[c.code] = c; });
+    var add = [];
+    catSh.getRange(1, 1, catSh.getLastRow(), 2).getValues().forEach(function (r) {
+      var code = String(r[0]).trim(), name = String(r[1]).trim();
+      if (!/^\d{3,4}$/.test(code) || !name) return;
+      if (have[code]) { if (have[code].name !== name) { have[code].name = name; add.push(have[code]); } }
+      else { var c = { code: code, name: name, keywords: [] }; have[code] = c; add.push(c); res.categories++; }
+    });
+    save_('categories', add); _cats = null;
+  }
+  // 도서목록
+  var bSh = old.getSheetByName('도서목록');
+  if (bSh) {
+    var v = bSh.getDataRange().getValues();
+    var h = headerIdx_(v, '도서명');
+    var g = function (r, k) { return h.map[k] === undefined ? '' : r[h.map[k]]; };
+    var existing = {}; rows_('books').forEach(function (b) { existing[b.code] = b; });
+    var out = [], seen = {};
+    v.slice(h.row + 1).forEach(function (r) {
+      var title = String(g(r, '도서명')).trim(), cat = String(g(r, '분류번호')).trim(), pno = String(g(r, '구매번호')).trim(), cno = String(g(r, '도서번호')).trim();
+      if (!title || !/^\d+$/.test(cat) || !pno || !cno) return;
+      if (/^\d+$/.test(pno) && pno.length < 3) pno = ('00' + pno).slice(-3);
+      var code = cat + '-' + pno + '-' + cno;
+      var isbn = String(g(r, '바코드')).replace(/\D/g, '');
+      if (/^97[89]\d{15}$/.test(isbn)) isbn = isbn.slice(0, 13); // 바코드 뒤에 붙은 부가기호 5자리 제거
+      var b = existing[code];
+      if (seen[code]) return; // 원본 시트에 같은 도서코드가 두 줄 있으면 처음 줄 기준
+      seen[code] = 1;
+      if (b && !overwrite) {
+        // 이미 있는 책: 바코드가 새로 생겼거나, 시트에서 도서명·저자·출판사를 고쳤으면 따라감
+        var ch = false, au = String(g(r, '저자')).trim(), pu = String(g(r, '출판사')).trim();
+        if (!b.isbn && isbn) { b.isbn = isbn; ch = true; }
+        if (b.title !== title) { b.title = title; ch = true; }
+        if (au && b.author !== au) { b.author = au; ch = true; }
+        if (pu && b.publisher !== pu) { b.publisher = pu; ch = true; }
+        if (ch) { out.push(b); res.updated = (res.updated || 0) + 1; }
+        return;
+      }
+      b = b || { code: code, status: 'active', createdAt: '', cover: '', description: '' };
+      b.catCode = cat; b.purchaseNo = pno; b.copyNo = cno; b.title = title; b.author = String(g(r, '저자')).trim(); b.publisher = String(g(r, '출판사')).trim(); b.isbn = isbn;
+      b.loanCount = Number(g(r, '대출횟수')) || 0;
+      existing[code] = b; out.push(b); res.books++;
+    });
+    save_('books', out);
+  }
+  // 대출현황
+  var lSh = old.getSheetByName('대출현황');
+  if (lSh) {
+    var lv = lSh.getDataRange().getValues();
+    var lh = headerIdx_(lv, '성명');
+    var lg = function (r, k) { return lh.map[k] === undefined ? '' : r[lh.map[k]]; };
+    var t = today_();
+    // 원본 시트에는 같은 번호가 서로 다른 대출에 쓰인 경우가 있어 번호+도서코드로 찾는다
+    var byNo = {}; rows_('loans').forEach(function (l) { if (l.no) byNo[l.no + '|' + l.bookCode] = l; });
+    var bookMap = {}; rows_('books').forEach(function (b) { bookMap[b.code] = b; });
+    var lout = [], lostBooks = [];
+    lv.slice(lh.row + 1).forEach(function (r) {
+      var code = String(lg(r, '도서코드')).trim(), name = String(lg(r, '성명')).trim();
+      if (!code || !name) return;
+      var no = Number(lg(r, '번호')) || null;
+      var ret = normDate_(lg(r, '반납확인일')), checker = String(lg(r, '반납확인자')).trim(), memo = String(lg(r, '메모')).trim();
+      var tag = checker + ' ' + memo, status;
+      if (/분실/.test(tag)) status = 'lost';
+      else if (/중복/.test(tag)) status = 'cancelled';
+      else if (ret && ret <= t && !/^\*/.test(checker)) status = 'returned';
+      else if (ret && ret < t) status = 'returned';
+      else status = 'active';
+      var loanDate = normDate_(lg(r, '대출일'));
+      var b = bookMap[code];
+      var l = no && byNo[no + '|' + code];
+      if (l && !overwrite && l.status !== 'active') return;
+      if (l && !overwrite && status === 'active') return;
+      l = l || { id: uid_(), no: no, empNo: '', email: '', extensions: [], extensionRequest: null, createdBy: 'sheet' };
+      l.bookCode = code; l.titleKey = b ? titleKey_(b) : code.split('-').slice(0, 2).join('-'); l.bookTitle = String(lg(r, '도서명')).trim() || (b ? b.title : '');
+      l.team = String(lg(r, '소속')).trim(); l.name = name; l.loanDate = loanDate; l.pickupDate = loanDate ? addDays_(loanDate, 1) : '';
+      l.dueDate = normDate_(lg(r, '반납예정일')); l.status = status; l.appliedAt = loanDate;
+      l.returnedAt = status === 'returned' ? ret : ''; l.returnedBy = status === 'returned' ? checker : '';
+      l.memo = [memo, /^\*/.test(checker) ? checker : ''].filter(String).join(' ');
+      lout.push(l); res.loans++;
+      if (status === 'lost' && b && b.status !== 'lost') { b.status = 'lost'; lostBooks.push(b); }
+    });
+    save_('loans', lout);
+    save_('books', lostBooks);
+  }
+  recountLoans_();
+  matchEmployees_();
+  return res;
+}
+
+// 원본 시트에는 '대출횟수' 칸이 없어서, 대출 기록으로 권마다 대출 횟수를 다시 셈 ('많이 읽은 책'·인기순·추천에 사용)
+function recountLoans_() {
+  var n = {};
+  rows_('loans').forEach(function (l) { if (l.status !== 'cancelled' && l.status !== 'rejected' && l.bookCode) n[l.bookCode] = (n[l.bookCode] || 0) + 1; });
+  var changed = rows_('books').filter(function (b) { var c = n[b.code] || 0; if ((Number(b.loanCount) || 0) < c) { b.loanCount = c; return true; } return false; });
+  save_('books', changed);
+  return changed.length;
+}
+
+function headerIdx_(values, must) {
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i].map(function (c) { return String(c).replace(/\s/g, ''); });
+    if (row.indexOf(must) >= 0) { var map = {}; row.forEach(function (c, j) { if (c && map[c] === undefined) map[c] = j; }); return { row: i, map: map }; }
+  }
+  throw new AppError("'" + must + "' 머리글을 찾지 못했습니다.");
+}
+
+// 사원명부 통째로 바꾸기 (관리자 화면에서 엑셀 붙여넣기/CSV): rows = [[사번, 성명, 소속, 이메일], ...]
+function importEmployees_(rows) {
+  rows = (rows || []).map(function (r) { return [normEmp_(r[0]), String(r[1] || '').trim(), String(r[2] || '').trim(), String(r[3] || '').trim()]; })
+    .filter(function (r) { return r[0] && r[1] && !/사번|EMP/i.test(r[0]); });
+  if (!rows.length) throw new AppError('사번·성명이 있는 행을 찾지 못했습니다. 사번·성명·소속·이메일 4열을 붙여넣어 주세요.');
+  var seen = {}, dup = [];
+  rows.forEach(function (r) { if (seen[r[0]]) dup.push(r[0]); seen[r[0]] = 1; });
+  if (dup.length) throw new AppError('사번이 중복됩니다: ' + dup.slice(0, 5).join(', '));
+  var sh = db_().getSheetByName('사원명부');
+  var last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, 4).setValues(Array.apply(null, Array(last - 1)).map(function () { return ['', '', '', '']; }));
+  sh.getRange(2, 1, rows.length, 4).setValues(rows);
+  _tables = {}; _empMap = null;
+  var m = matchEmployees_();
+  return { count: rows.length, noEmail: rows.filter(function (r) { return !r[3]; }).length, matched: m.matched };
+}
+
+// ===== Recommend.gs =====
+// ─────────────────────────────────────────────────────
+// 상황·직무 기반 도서 추천 (개인정보 없음: 사번·이름·교육이력을 받지 않음)
+//  입력: 직무 그룹(8개 중 1) + 고민 상황(선택/자유입력) + 관심 키워드
+//  출력: 보유 도서 3권 + 추천 이유 + 대출 가능 여부 (대출 중이면 대체 도서)
+//  기록: 개인을 알 수 없는 키워드만 '검색기록' 탭에 남겨 운영자 인사이트에 사용
+// ─────────────────────────────────────────────────────
+var JOB_GROUPS = [
+  // 2026 전사 AI 해커톤 업무 그룹 8개 기준
+  { id: 'dsales', name: '국내 영업', desc: '국내 영업·영업기획, 온라인몰, 인테리어', kw: ['영업', '세일즈', '협상', '설득', '고객', '화술', '대화', '관계'], cats: ['101', '224', '217', '113', '211'] },
+  { id: 'gsales', name: '해외 영업', desc: '해외법인 운영, 해외영업', kw: ['해외', '글로벌', '영어', '협상', '세계', '문화', '영업', '비즈니스'], cats: ['120', '111', '501', '224', '305'] },
+  { id: 'cs', name: '고객 서비스', desc: '장비 서비스, 고객상담', kw: ['고객', '서비스', '상담', '응대', '감정', '말투', '불만', '커뮤니케이션'], cats: ['106', '101', '211', '217', '404'] },
+  { id: 'mkt', name: '마케팅·홍보', desc: '마케팅, 제품 PM, 학술, 홍보, 디자인', kw: ['마케팅', '브랜드', '브랜딩', '트렌드', '소비', '카피', '콘텐츠', '디자인'], cats: ['114', '140', '113', '133', '216'] },
+  { id: 'rnd', name: 'R&D', desc: '연구개발, R&D기획, 인허가, 시험평가', kw: ['연구', '과학', '의료', '치과', '임상', '기술', '혁신', '데이터'], cats: ['1302', '1301', '801', '802', '104'] },
+  { id: 'prod', name: '생산', desc: '생산, 품질', kw: ['생산', '품질', '공정', '개선', '문제해결', '현장', '원가', '혁신'], cats: ['119', '104', '219', '127'] },
+  { id: 'scm', name: '구매·물류', desc: '구매, 시설, 물류, SCM', kw: ['구매', '물류', 'scm', '협상', '원가', '공급', '재고', '유통'], cats: ['138', '113', '224', '119'] },
+  { id: 'support', name: '경영지원·IT', desc: 'IT, 인사, 경영기획, ESG, 재무, 감사, 법무', kw: ['인사', '회계', '재무', '기획', 'it', 'ai', '데이터', '조직', '법률', '전략'], cats: ['108', '131', '132', '135', '103', '1109', '1111', '1007'] },
+];
+
+// trig: 이 말이 있으면 그 고민으로 봄 / weak: 다른 고민이 하나도 안 잡힐 때만 봄 (예: '상사', '힘들어요')
+var SITUATIONS = [
+  { id: 'newbie', label: '신입이라 회사생활이 낯설어요', trig: ['신입', '사회초년생', '초년생', '입사', '막내', '회사생활', '직장생활', '인턴', '첫직장', '일잘러', '일잘하'], kw: ['회사생활', '직장생활', '직장인', '신입', '사회초년생', '처세', '태도', '매너', '센스', '일하는'], cats: ['203', '206', '220', '227', '212'] },
+  { id: 'leader', label: '첫 팀장이 됐어요', trig: ['팀장', '리더', '관리자', '파트장', '매니저', '승진', '부하직원', '위임', '팀을이끌'], kw: ['리더', '리더십', '팀장', '코칭', '조직', '위임', '맡기', '피드백', '관리'], cats: ['102', '109', '202', '221'] },
+  { id: 'coach', label: '후배를 잘 가르치고 싶어요', trig: ['후배', '가르치', '가르쳐', '코칭', '육성', '온보딩', '사수', '멘토', '피드백'], kw: ['코칭', '피드백', '가르치', '성장', '질문', '리더', '육성', '멘토'], cats: ['202', '221', '102', '109'] },
+  { id: 'report', label: '보고·보고서를 잘하고 싶어요', trig: ['보고하', '보고를', '보고가', '보고할', '보고드', '보고서', '중간보고', '문서', '글쓰기', '기획서', '작성', '문장', '결재', '요약', '두괄식'], kw: ['보고', '보고서', '글쓰기', '문장', '설명', '기획', '문서', '논리', '요약', '두괄식', '파워포인트'], cats: ['223', '218', '209', '203', '408', '1103'] },
+  { id: 'speak', label: '말하기·발표가 어려워요', trig: ['발표', '말하기', '말을', '말이', '말솜씨', '설명', '프레젠테이션', '피티', '스피치', '말투', '화술', '전달', '앞에서'], kw: ['말하기', '발표', '프레젠테이션', '화술', '대화', '말투', '설명', '전달'], cats: ['217', '207', '211'] },
+  { id: 'people', label: '동료·상사와 관계가 힘들어요', trig: ['관계', '갈등', '인간관계', '무례', '눈치', '사이가', '사이도', '싫어하', '싫은사람', '싫은동료', '싫은상사', '미워', '미운', '얄미', '꼴보기', '괴롭', '뒷담', '서운', '따돌', '불편한사람'], weak: ['상사', '동료', '선배', '사람'], kw: ['관계', '대인', '갈등', '감정', '심리', '말투', '무례', '대화', '불편한'], cats: ['210', '404', '211'] },
+  { id: 'hr', label: '인사·조직 이슈가 궁금해요', trig: ['인사', 'hr', '채용', '면접', '평가제도', '인사평가', '성과평가', '보상', '연봉', '성과관리', '조직문화', '기업문화', '노무', '근로', '이직률', '퇴사율', '인재', '직무분석', '교육담당', '몰입', '리텐션'], kw: ['인사', '채용', '평가', '보상', '조직문화', '인재', '성과', '동기', '조직', '역량', '직무'], cats: ['108', '135', '109', '117', '1008'] },
+  { id: 'sales', label: '영업·고객 만나는 게 힘들어요', trig: ['영업', '거래처', '고객사', '세일즈', '협상', '설득', '계약', '실적', '미팅', '사람대하', '사람상대', '사람만나', '대인'], kw: ['대화', '말투', '설득', '호감', '관계', '서비스', '고객'], cats: ['217', '211', '101', '106', '210'] },
+  { id: 'cs', label: '고객 응대가 어려워요', trig: ['고객', '컴플레인', '클레임', '불만', '진상', '응대', '민원', '화를내', '항의'], kw: ['고객', '서비스', '응대', '불만', '감정', '설득', '대화'], cats: ['106', '101', '211', '217'] },
+  { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '지쳤', '피곤', '우울', '불안', '스트레스', '무기력', '의욕', '잠이안', '불면', '가기싫', '출근하기싫', '하기싫', '퇴사'], weak: ['힘들', '힘든', '버거'], kw: ['번아웃', '마음', '회복', '위로', '쉼', '피곤', '불안', '휴식'], cats: ['404', '701', '222'] },
+  { id: 'time', label: '시간 관리·습관을 잡고 싶어요', trig: ['시간관리', '시간', '일정', '미루', '루틴', '습관', '집중', '계획', '바빠', '바쁜'], kw: ['시간', '습관', '루틴', '집중', '계획', '자기관리', '성과'], cats: ['212', '205', '220', '227'] },
+  { id: 'health', label: '건강·운동을 챙기고 싶어요', trig: ['건강', '운동', '다이어트', '살빼', '체중', '식단', '수면', '잠을', '허리', '거북목', '스트레칭', '헬스', '요가', '걷기'], kw: ['건강', '운동', '몸', '습관', '식단', '수면', '다이어트'], cats: ['1201', '205'] },
+  { id: 'ai', label: 'AI를 업무에 쓰고 싶어요', trig: ['ai', '인공지능', '챗gpt', '지피티', 'gpt', '제미나이', '클로드', '자동화', '프롬프트', '코파일럿'], kw: ['ai', '인공지능', '챗gpt', '제미나이', '클로드', '자동화', '프롬프트'], cats: ['1111', '1104', '1109'] },
+  { id: 'data', label: '숫자·데이터에 강해지고 싶어요', trig: ['숫자', '데이터', '통계', '회계', '재무제표', '엑셀', '분석'], kw: ['데이터', '숫자', '통계', '회계', '재무제표', '엑셀', '분석'], cats: ['132', '139', '1105', '1106'] },
+  { id: 'think', label: '생각 정리·문제 해결을 잘하고 싶어요', trig: ['생각', '정리', '문제해결', '논리', '사고', '아이디어', '창의'], kw: ['생각', '정리', '문제해결', '사고', '전략', '아이디어', '논리'], cats: ['219', '218', '216'] },
+  { id: 'trend', label: '트렌드·시야를 넓히고 싶어요', modifier: true, trig: ['트렌드', '미래', '시야', '교양', '흐름', '변화', '유행', '요즘사람', '소비', '좋아하는지', 'mz', '이슈', '화두', '최신'], kw: ['트렌드', '미래', '경제', '세계', '교양', '변화', '소비', '브랜드'], cats: ['112', '136', '401', '114'] },
+  { id: 'money', label: '재테크·경제 공부를 하고 싶어요', trig: ['재테크', '투자', '주식', '돈', '부자', '금융', '경제', '연금', '저축'], kw: ['재테크', '돈', '투자', '부', '경제', '금융', '주식'], cats: ['137', '123', '136'] },
+  { id: 'lang', label: '외국어 공부를 하고 싶어요', trig: ['영어', '중국어', '일본어', '외국어', '회화', '토익', '오픽'], kw: ['영어', '중국어', '일본어', '회화', '비즈니스'], cats: ['501', '502', '503'] },
+  { id: 'read', label: '가볍게 읽을 책을 찾아요', trig: ['소설', '에세이', '시집', '가볍게', '재밌는', '재미있는', '힐링', '쉬어가', '머리식'], kw: ['소설', '에세이', '이야기'], cats: ['601', '602', '603', '604', '605', '607', '701', '702'] },
+];
+
+var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요', '가장', '궁금', '궁금해요', '이슈', '바꾸고', '알고', '큰', '대하', '만나', '대하는', '만나는', '영업직'];
+var ENDINGS = /([가-힣]{2,}요|어야|아야|쳐야|어서|아서|돼요|와요|세요|해야|야지|건지|는지도|는데|어요|아요|여요|해요|워요|려요|에요|예요|네요|고요|지요|죠|습니다|니다|지만|는지|을까|ㄹ까|할까|한데|했는데|겠어요|싶고)$/;
+// 고민별로 먼저 권하는 책 (보유 도서 중에서 사람이 고른 목록). 이 책들을 먼저 보여 주고, 모자라면 낱말·분류로 찾은 책으로 채움
+var CURATED = {
+  newbie: ["눈치껏 못 배웁니다", "사수가 없어도 괜찮습니다", "오피스 문해력", "프로일잘러", "직장생활 정글의 법칙", "회사생활이 힘드냐고 아들러가 물었다", "일의 감각", "보이게 일하라"],
+  leader: ["처음 리더가 된 당신에게", "요즘 팀장은 이렇게 일합니다", "리더의 용기", "일을 잘 맡기는 기술", "완벽한 팀", "두려움 없는 조직", "좋은 리더를 넘어 위대한 리더로", "리더 반성문"],
+  coach: ["코칭경영의 도", "코칭의정석", "초격차", "일을 잘 맡기는 기술", "가르치기의 결", "리더의 용기"],
+  report: ["가장 쉬운 독학 페이퍼로지 보고서 첫걸음", "실무에 바로 쓰는 일잘러의 보고서 작성법", "더 프리젠테이션", "횡설수설하지 않고 정확하게 설명하는 법", "일 잘하는 사람은 단순하게 말합니다", "산으로 가지 않는 정리법", "기획의 정석", "내 문장이 그렇게 이상한가요"],
+  speak: ["횡설수설하지 않고 정확하게 설명하는 법", "한석준의 말하기 수업", "생각정리 스피치", "더 프리젠테이션", "어른의 말투", "일 잘하는 사람은 단순하게 말합니다", "말투의 편집"],
+  people: ["나는 왜 네 말이 힘들까", "무례한 사람에게 웃으며 대처하는 법", "불편한 사람과 뻔뻔하게 대화하는 법", "사무실의 도른자들", "미움받을 용기", "데일 카네기 인간관계론", "적당히 가까운 사이", "내가 예민한게 아니라 네가 너무한 거야", "그때 이렇게 화냈어야 했는데"],
+  sales: ["불편한 사람과 뻔뻔하게 대화하는 법", "끌리는 말투에는 비밀이 있다", "괜히 끌리는 사람들, 호감의 법칙", "대화의 정석", "적을 만들지 않는 대화법", "데일 카네기 인간관계론", "전화는 마케팅이다", "완벽한 서비스는 어떻게 탄생되는가", "어른의 말투"],
+  hr: ["2020 HR 메가트렌드", "비즈니스 파트너, HR 애널리틱스", "인재경영, 데이터사이언스를 만나다", "최고의 인재를 찾기 위한 단 하나의 질문", "역량평가 역량면접", "밀레니얼은 어떻게 배우고", "센 세대, 낀 세대", "MZ 익스피리언스", "직무중심 임금관리"],
+  cs: ["완벽한 서비스는 어떻게 탄생되는가", "NPS 순추천고객지수", "대화의 정석", "적을 만들지 않는 대화법", "무례한 사람에게 웃으며 대처하는 법", "불편한 사람과 뻔뻔하게 대화하는 법"],
+  rest: ["효과 빠른 번아웃 처방전", "나는 도대체 왜 피곤할까", "나를 소모하지 않는 현명한 태도에 관하여", "신영철 박사의 그냥 살자", "하버드 회복탄력성 수업", "기분이 태도가 되지 않게", "우울한 마음도 습관입니다", "하마터면 열심히 살 뻔했다"],
+  time: ["아주 작은 습관의 힘", "시간을 찾아드립니다", "생각하는 대로 해내는 시간 연금술사", "미루는 습관 극복하기", "도둑맞은 집중력", "슈퍼모닝", "하루 15분 정리의 힘", "몰입"],
+  ai: ["일 잘하는 사람은 이렇게 챗GPT를 씁니다", "된다! 하루 만에 끝내는 챗GPT 활용법", "1400만 직장인을 위한 챗GPT", "챗GPT·퍼플렉시티·클로드", "뚝딱 바로 써먹는 첫 클로드", "된다! 하루 만에 끝내는 제미나이", "비전공자도 이해할 수 있는 AI 지식", "AI 2026 트렌드"],
+  data: ["숫자는 거짓말을 한다", "하마터면 회계를 모르고 일할 뻔했다", "만화로 배우는 재무회계", "직장인이여 회계하라", "진짜 쓰는 실무 엑셀", "직장인을 위한 실무 엑셀", "데이터 리터러시", "숫자 감각의 힘"],
+  think: ["생각정리스킬", "산으로 가지 않는 정리법", "기획이란 무엇인가", "생각정리 기획력", "스마트한 생각들", "관점을 디자인하라"],
+  trend: ["트렌드 코리아 2026", "머니 트렌드 2026", "라이프 트렌드 2026", "시대예보", "AI 2026 트렌드"],
+  money: ["부자 아빠 가난한 아빠", "돈의 속성", "돈의 방정식", "존리의 부자되기 습관", "부의 갈림길", "머니 트렌드 2026"],
+  lang: ["비즈니스 영어 실수 고침 사전", "거의 모든 행동 표현의 영어"],
+  health: ["느리게 나이 드는 습관", "운동말고 움직임 리셋", "50 이후, 건강을 결정하는 7가지 습관", "건강과 다이어트를 동시에"]
+};
+// 상황을 설명하는 말일 뿐 책 주제가 아닌 단어 (제목에 있어도 점수를 적게)
+var CONTEXT_WORDS = ['상사', '동료', '선배', '후배', '사원', '회사', '직장', '업무', '팀', '팀에', '사람', '사람들', '고객', '요즘', '다시', '앞에서', '말을', '일이', '마음'];
+var JOSA = ['에서는', '으로는', '에게서', '에게', '에서', '으로', '이랑', '하고', '까지', '부터', '처럼', '이나', '이고', '하는', '해요', '은', '는', '이', '가', '을', '를', '에', '의', '도', '와', '과', '로', '랑', '만'];
+
+function stripJosa_(w) {
+  w = String(w || '').trim().toLowerCase();
+  for (var i = 0; i < JOSA.length; i++) { var e = JOSA[i]; if (w.length > e.length + 1 && w.slice(-e.length) === e) return w.slice(0, -e.length); }
+  return w;
+}
+function terms_(text) {
+  var out = [];
+  String(text || '').replace(/[^0-9a-zA-Z가-힣\s]/g, ' ').split(/\s+/).forEach(function (raw) {
+    var t = stripJosa_(raw);
+    var st = t.replace(/(했는데|하는데|이라서|해서|하면|인데|이라)$/, ''); // 무례해서→무례, 발표하면→발표, 신입인데→신입
+    if (st !== t && st.length >= 2) t = st;
+    if (ENDINGS.test(t)) return;
+    if (t.length > 2 && t.slice(-1) === '들') t = t.slice(0, -1);
+    if (t.length >= 2 && STOPWORDS.indexOf(t) < 0 && out.indexOf(t) < 0) out.push(t);
+  });
+  return out.slice(0, 12);
+}
+function situationsFrom_(ids, text) {
+  var picked = [], t = normStr_(text).replace(/인사이트|인사말|인사성/g, ''), fromText = [];
+  var has = function (w) { return t.indexOf(normStr_(w)) >= 0; };
+  SITUATIONS.forEach(function (s) {
+    if ((ids || []).indexOf(s.id) >= 0) picked.push(s);
+    else if (t && s.trig.some(has)) fromText.push(s);
+  });
+  // '상사·동료'만 나오고 보고·말하기·신입 같은 다른 고민이 있으면 관계 고민으로 보지 않음
+  //   예) "상사에게 보고하는 게 어려워요" → 보고 / "상사가 너무 싫어요" → 관계
+  if (t && !picked.length && !fromText.length) {
+    var w = SITUATIONS.filter(function (s) { return s.weak && s.weak.some(has); });
+    if (w.length) fromText.push(w[0]); // '사람이 너무 힘들어요' → 관계 하나만
+  }
+  fromText.forEach(function (s) { if (picked.indexOf(s) < 0) picked.push(s); });
+  return picked;
+}
+
+// 제목·분류·소개글로 검색할 수 있는 책 목록 (책키 단위)
+function corpus_() {
+  var cat = catalog_();
+  var desc = {};
+  rows_('books').forEach(function (b) { var k = titleKey_(b); if (!desc[k] && b.description) desc[k] = String(b.description); });
+  var kwByCat = {};
+  categories_().forEach(function (c) { kwByCat[c.code] = (c.keywords || []).map(normStr_); });
+  return cat.items.map(function (t) {
+    return { t: t, tw: String(t.title || '').toLowerCase().split(/[^0-9a-z가-힣]+/).filter(String), title: normStr_(t.title), catName: normStr_(t.catName), desc: normStr_(desc[t.key] || '').slice(0, 1500), catKw: kwByCat[t.catCode] || [] };
+  });
+}
+
+function scoreBook_(d, prof) {
+  var s = 0, hits = 0, kwHit = false, why = { title: [], desc: [], cat: null, catFrom: '', popular: false };
+  prof.terms.forEach(function (term) {
+    var n = normStr_(term); if (n.length < 2) return;
+    if (CONTEXT_WORDS.indexOf(n) >= 0) { if (d.title.indexOf(n) >= 0) s += 0.3; return; }
+    var mine = prof.userTerms.indexOf(term) >= 0;
+    // 직접 적은 두 글자 말은 낱말 첫머리에서만 인정 ('화를'이 '대화를'에 걸리지 않게)
+    var inTitle = mine && n.length <= 2 ? d.tw.some(function (w) { return w.indexOf(n) === 0; }) : d.title.indexOf(n) >= 0;
+    var isKw = prof.kwTerms.indexOf(term) >= 0;
+    var m = mine ? 1.5 : 1, counts = mine || !prof.modKw[n]; // 직접 적은 말은 더 무겁게, 트렌드 같은 꾸밈 고민의 낱말은 근거 수에서 뺌
+    if (inTitle) { s += 4 * m; if (counts) hits++; if (isKw) kwHit = true; why.title.push(term); }
+    else if (d.catName.indexOf(n) >= 0) { s += 2.5 * m; if (counts) hits++; if (isKw) kwHit = true; why.catFrom = why.catFrom || 'term'; }
+    else if (!(mine && n.length <= 2) && d.desc.indexOf(n) >= 0) { s += 1.5 * m; if (counts) hits++; if (isKw) kwHit = true; why.desc.push(term); }
+    else if (d.catKw.indexOf(n) >= 0) { s += 1.5; }
+  });
+  var c = prof.cats[d.t.catCode] || prof.cats[d.t.group];
+  if (c) { s += c.w; why.cat = c; }
+  // 사람이 고른 책은 목록 순서대로 맨 앞에
+  var pick; for (var q = 0; q < prof.curated.length; q++) if (d.title.indexOf(prof.curated[q]) === 0) { pick = q; break; }
+  if (pick !== undefined) return { d: d, score: 100 - pick + (d.t.available > 0 ? 0.5 : 0), rel: 99, why: why, curated: true };
+  // 업무 고민에 육아·가족 책이나 소설이 끼지 않게 (본인이 그런 말을 쓴 경우는 예외)
+  if (!prof.allowFamily && (d.t.group === '1500' || /엄마|아빠|딸에게|딸은|아들|육아|아이를|부모/.test(d.t.title))) return null;
+  if (!prof.allowFiction && /^6/.test(String(d.t.group)) && prof.sits.length) return null;
+  // 적은 고민을 하나도 못 알아들었으면(예: '배고프다') 직무 분야만으로 아무 책이나 추천하지 않음.
+  //   이때는 직접 적은 낱말이 책 제목·소개와 두 개 이상 맞거나, 관심 키워드 칸에 적은 말이 맞을 때만 추천
+  if (!prof.sits.length && prof.freeText && !kwHit && hits < 2) return null;
+  // 고민이 잡혔는데 그 고민 분야 밖의 책이면, 낱말이 두 개 이상 맞을 때만 추천
+  if (prof.sits.length && !(c && c.from === 'sit') && hits < 2) return null;
+  var rel = s;
+  if (rel <= 0) return null;
+  s += Math.min(Number(d.t.loanCount) || 0, 30) * 0.05;
+  if (d.t.isNew) s += 0.4;
+  var yr = String(d.t.title).match(/20(1\d|2\d)/); if (yr) s += Math.max(0, Number(yr[0]) - 2018) * 0.2; // 『트렌드 코리아』 같은 연도판은 최신판 먼저
+  why.popular = (Number(d.t.loanCount) || 0) >= 5;
+  return { d: d, score: s, rel: rel, why: why };
+}
+
+function profile_(input) {
+  var job = JOB_GROUPS.filter(function (j) { return j.id === input.job; })[0] || null;
+  var free = String(input.situation || '');
+  var sits = situationsFrom_(input.situations, free);
+  var userTerms = terms_(input.keywords).concat(terms_(free).filter(function (t) { return terms_(input.keywords).indexOf(t) < 0; }))
+    .filter(function (t) { return CONTEXT_WORDS.indexOf(normStr_(t)) < 0; });
+  var kwTerms = terms_(input.keywords);
+  var terms = userTerms.slice();
+  sits.forEach(function (s) { s.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); }); });
+  var cats = {};
+  if (job) job.cats.forEach(function (code) { cats[code] = { w: 1.5, from: 'job', label: job.name }; });
+  var main = sits.filter(function (s) { return !s.modifier; });
+  // '트렌드'는 다른 고민과 같이 나오면 그 주제의 최신 흐름이라는 뜻 → 분야는 주제 쪽만 ('인사 이슈' → 인사 분야 + 트렌드 낱말)
+  (main.length ? main : sits).forEach(function (s) { s.cats.forEach(function (code) { cats[code] = { w: 3, from: 'sit', label: s.label }; }); });
+  if (job && !userTerms.length && !sits.length) job.kw.forEach(function (k) { if (terms.indexOf(k) < 0) terms.push(k); });
+  var modKw = {};
+  if (main.length) sits.forEach(function (s) { if (s.modifier) s.kw.forEach(function (k) { modKw[normStr_(k)] = 1; }); });
+  main.forEach(function (s) { s.kw.forEach(function (k) { delete modKw[normStr_(k)]; }); });
+  var curated = [];
+  // 고민마다 한 권씩 번갈아 순서를 매김 (보고 + 신입이면 보고 1, 신입 1, 보고 2 …)
+  var lists = (main.length ? main : sits).map(function (x) { return (CURATED[x.id] || []).map(function (t) { return normStr_(t); }); });
+  for (var k = 0; k < 12; k++) lists.forEach(function (l) { if (l[k] !== undefined && curated.indexOf(l[k]) < 0) curated.push(l[k]); });
+  var raw = free + ' ' + String(input.keywords || '');
+  return { job: job, sits: sits, userTerms: userTerms, kwTerms: kwTerms, freeText: !!free.trim(), terms: terms, cats: cats, modKw: modKw, curated: curated,
+    allowFamily: /엄마|아빠|딸|아들|육아|아이|부모|가족|자녀/.test(raw),
+    allowFiction: sits.some(function (x) { return x.id === 'read'; }) || /소설/.test(raw) };
+}
+
+function reasonOf_(x, prof) {
+  var t = x.d.t, parts = [];
+  if (x.why.cat && x.why.cat.from === 'sit') parts.push('‘' + x.why.cat.label + '’ 고민에 맞는 「' + t.catName + '」 분야');
+  else if (x.why.cat && x.why.cat.from === 'job') parts.push(x.why.cat.label + ' 직무에서 자주 찾는 「' + t.catName + '」 분야');
+  if (x.why.title.length) parts.push('제목에 ' + x.why.title.slice(0, 2).map(function (w) { return '‘' + w + '’'; }).join('·') + ' 포함');
+  else if (x.why.desc.length) parts.push('책 소개에 ' + x.why.desc.slice(0, 2).map(function (w) { return '‘' + w + '’'; }).join('·') + ' 언급');
+  if (x.why.popular) parts.push('사내에서 ' + t.loanCount + '번 대출된 인기 도서');
+  else if (t.isNew) parts.push('최근 들어온 신간');
+  if (!parts.length) parts.push('「' + t.catName + '」 분야 도서');
+  return parts.slice(0, 3).join(' · ');
+}
+
+function bookCard_(x, prof) {
+  var t = x.d.t;
+  return { key: t.key, title: t.title, author: t.author, publisher: t.publisher, isbn: t.isbn, cover: t.cover, catCode: t.catCode, catName: t.catName,
+    available: t.available, copies: t.copies, earliestDue: t.earliestDue, waiting: t.waiting, loanCount: t.loanCount, reason: reasonOf_(x, prof) };
+}
+
+function recommend_(input) {
+  input = input || {};
+  var prof = profile_(input);
+  if (!prof.job && !prof.terms.length && !String(input.situation || input.keywords || '').trim()) throw new AppError('직무 그룹이나 고민·관심 키워드를 하나 이상 알려 주세요.');
+  // 적은 고민을 하나도 알아듣지 못하면(예: '배고프다') 직무만으로 엉뚱한 책을 내밀지 않고 다시 물어봄
+  var freeText = String(input.situation || '').trim();
+  if (freeText && !String(input.keywords || '').trim() && !prof.sits.length && !(input.situations || []).length) {
+    var mine = prof.userTerms.map(normStr_).filter(function (t) { return t.length >= 2; });
+    var anyHit = mine.length && corpus_().some(function (d) { return mine.some(function (t) { return d.tw.some(function (w) { return w.indexOf(t) === 0; }) || d.catName.indexOf(t) >= 0; }); });
+    if (!anyHit) {
+      logSearch_({ source: 'recommend', job: prof.job ? prof.job.id : '', situations: [], terms: prof.userTerms, hits: 0, topScore: 0 });
+      return { cards: [], matched: 0, unknown: true, text: freeText.slice(0, 40), understood: { job: prof.job ? prof.job.name : '', situations: [], keywords: prof.userTerms }, weak: false };
+    }
+  }
+  var ranked = corpus_().map(function (d) { return scoreBook_(d, prof); }).filter(Boolean)
+    .filter(function (x) { return x.rel >= 2.5; })
+    .sort(function (a, b) { return b.score - a.score; });
+  var used = {}, seenSeries = {}, cards = [];
+  function seriesKey(t) { return normTitle_(t.title).replace(/[0-9]+(권|부|편)?$/, '').replace(/(상|하|上|下)$/, '').slice(0, 6); }
+  function free(y) { return !used[y.d.t.key] && !seenSeries[seriesKey(y.d.t)]; }
+  function take(y) { used[y.d.t.key] = 1; seenSeries[seriesKey(y.d.t)] = 1; }
+  var skip = Math.max(0, Number(input.page) || 0) * 3; // [다른 책 보기]를 누를 때마다 다음 3권
+  for (var i = 0; i < ranked.length && cards.length < 3; i++) {
+    var x = ranked[i];
+    if (!free(x)) continue;
+    if (skip > 0) { skip--; take(x); continue; }
+    take(x);
+    var card = bookCard_(x, prof);
+    if (x.d.t.available <= 0) {
+      // 대출 중이면 지금 빌릴 수 있는 대체 도서: 같은 소분류 → 같은 대분류 → 같은 키워드 → 그 다음 관련 도서
+      var pool = ranked.filter(function (y) { return free(y) && y.d.t.available > 0; });
+      var alt = pool.filter(function (y) { return y.d.t.catCode === x.d.t.catCode; })[0]
+        || pool.filter(function (y) { return y.d.t.group === x.d.t.group || y.why.title.some(function (w) { return x.why.title.indexOf(w) >= 0; }); })[0]
+        || pool[0];
+      if (alt) { take(alt); card.alt = bookCard_(alt, prof); }
+    }
+    cards.push(card);
+  }
+  logSearch_({ source: 'recommend', job: prof.job ? prof.job.id : '', situations: prof.sits.map(function (s) { return s.id; }), terms: prof.userTerms, hits: ranked.length, topScore: ranked[0] ? Math.round(ranked[0].rel * 10) / 10 : 0 });
+  return {
+    cards: cards, matched: ranked.length, page: Number(input.page) || 0, more: ranked.length > (Number(input.page) || 0) * 3 + 6,
+    understood: { job: prof.job ? prof.job.name : '', situations: prof.sits.map(function (s) { return s.label; }), keywords: prof.userTerms },
+    weak: ranked.length < 3,
+    unclear: prof.freeText && !prof.sits.length && !cards.length,
+  };
+}
+
+// ─── 익명 검색기록 ───────────────────────────────────
+function logSearch_(o) {
+  try {
+    var t = table_('searchLog');
+    var row = { at: nowIso_(), source: o.source || 'search', job: o.job || '', situations: (o.situations || []).join(' '), terms: (o.terms || []).join(' '), hits: Number(o.hits) || 0, topScore: o.topScore || '' };
+    t.sheet.appendRow(toRow_(t, row));
+    t.rows.push(row);
+  } catch (e) { console.error('logSearch', e); }
+}
+function logCatalogSearch_(q, count) {
+  var terms = terms_(q).filter(function (t) { return !/^\d+(-\d+)*$/.test(t); });
+  if (!terms.length) return { ok: true };
+  logSearch_({ source: 'search', terms: terms, hits: Math.max(0, Number(count) || 0) });
+  return { ok: true };
+}
+
+function recommendOptions_() {
+  return { jobs: JOB_GROUPS.map(function (j) { return { id: j.id, name: j.name, desc: j.desc }; }), situations: SITUATIONS.map(function (s) { return { id: s.id, label: s.label }; }) };
+}
+
+// ===== Requests.gs =====
+// ─────────────────────────────────────────────────────
+// 희망도서 신청 → 구매 투표 → 구매확정 → 입고 시 신청자 알림
+//  · 신청·투표는 사번으로 본인 확인(중복 투표 방지·입고 알림용). 화면에는 신청자를 공개하지 않음
+// ─────────────────────────────────────────────────────
+var REQ_OPEN = ['접수', '투표중', '투표완료', '구매확정'];
+var MAX_OPEN_REQUESTS_PER_PERSON = 5;
+
+function ownedMatch_(title, author) {
+  var q = bigrams_(title), nt = normTitle_(title), best = null;
+  catalog_().items.forEach(function (t) {
+    var s = normTitle_(t.title) === nt ? 1 : sim_(q, bigrams_(t.title));
+    if (s >= 0.82 && (!best || s > best.s)) best = { s: s, t: t };
+  });
+  return best ? { key: best.t.key, title: best.t.title, author: best.t.author, available: best.t.available, copies: best.t.copies } : null;
+}
+function sameRequest_(title) {
+  var nt = normTitle_(title), q = bigrams_(title);
+  return rows_('requests').filter(function (r) { return REQ_OPEN.indexOf(r.status) >= 0 && (normTitle_(r.title) === nt || sim_(q, bigrams_(r.title)) >= 0.85); })[0] || null;
+}
+
+function currentRound_() {
+  var t = today_();
+  return rows_('rounds').filter(function (r) { return r.status === '진행' && r.startDate <= t && t <= r.endDate; })
+    .sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); })[0] || null;
+}
+function tally_(roundId) {
+  var m = {};
+  rows_('ballots').forEach(function (b) { if (b.roundId === roundId) (b.choices || []).forEach(function (id) { m[id] = (m[id] || 0) + 1; }); });
+  return m;
+}
+function voterCount_(roundId) { return rows_('ballots').filter(function (b) { return b.roundId === roundId && (b.choices || []).length; }).length; }
+
+function requestView_(r, admin) {
+  var v = { id: r.id, createdAt: String(r.createdAt), title: r.title, author: r.author, publisher: r.publisher, reason: r.reason,
+    status: r.status, roundId: r.roundId, votes: r.votes || 0, adminMemo: r.adminMemo, bookCode: r.bookCode };
+  if (admin) { var e = r.empNo && empMap_()[normEmp_(r.empNo)]; v.empNo = r.empNo; v.requester = e ? String(e.name).trim() + ' (' + String(e.team).trim() + ')' : r.empNo; }
+  return v;
+}
+
+function roundView_(r, empNo) {
+  if (!r) return null;
+  var counts = tally_(r.id);
+  var reqs = {}; rows_('requests').forEach(function (x) { reqs[x.id] = x; });
+  var v = { id: r.id, title: r.title, startDate: r.startDate, endDate: r.endDate, maxVotes: r.maxVotes || 3, buyCount: r.buyCount || 0, status: r.status,
+    daysLeft: r.endDate ? diffDays_(r.endDate, today_()) : null, voters: voterCount_(r.id),
+    candidates: (r.candidates || []).filter(function (id) { return reqs[id]; }).map(function (id) { var q = requestView_(reqs[id]); q.count = counts[id] || 0; return q; }) };
+  if (r.result) v.result = r.result;
+  if (empNo) { var k = normEmp_(empNo); var b = rows_('ballots').filter(function (x) { return x.roundId === r.id && normEmp_(x.empNo) === k; })[0]; v.myChoices = b ? b.choices : []; }
+  return v;
+}
+
+// ─── 사용자 ──────────────────────────────────────────
+function wishBoard_() {
+  var round = currentRound_();
+  var list = rows_('requests').filter(function (r) { return r.status !== '반려' || diffDays_(today_(), String(r.decidedAt || r.createdAt).slice(0, 10)) <= 60; })
+    .sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).slice(0, 200).map(function (r) { return requestView_(r); });
+  var last = rows_('rounds').filter(function (r) { return r.status === '마감'; }).sort(function (a, b) { return String(b.endDate).localeCompare(String(a.endDate)); })[0];
+  return { round: roundView_(round), lastRound: last ? roundView_(last) : null, requests: list };
+}
+
+function submitRequest_(input, empNo, force) {
+  var who = employee_(empNo);
+  var title = String((input && input.title) || '').trim();
+  if (title.length < 2) throw new AppError('도서명을 입력해 주세요.');
+  if (!force) {
+    var own = ownedMatch_(title, input.author);
+    if (own) return { owned: own };
+    var dup = sameRequest_(title);
+    if (dup) return { duplicate: requestView_(dup) };
+  }
+  var mine = rows_('requests').filter(function (r) { return normEmp_(r.empNo) === who.empNo && REQ_OPEN.indexOf(r.status) >= 0; });
+  if (mine.length >= MAX_OPEN_REQUESTS_PER_PERSON) throw new AppError('진행 중인 신청이 ' + mine.length + '건 있습니다. 처리된 뒤 다시 신청해 주세요. (1인 최대 ' + MAX_OPEN_REQUESTS_PER_PERSON + '건)');
+  var r = { id: uid_(), createdAt: nowIso_(), title: title, author: String(input.author || '').trim(), publisher: String(input.publisher || '').trim(),
+    reason: String(input.reason || '').trim().slice(0, 500), empNo: who.empNo, status: '접수', roundId: '', votes: 0, adminMemo: '', bookCode: '', decidedAt: '' };
+  save_('requests', r);
+  return { created: requestView_(r) };
+}
+
+function vote_(roundId, ids, empNo) {
+  var who = employee_(empNo);
+  var r = rows_('rounds').filter(function (x) { return x.id === roundId; })[0];
+  var t = today_();
+  if (!r || r.status !== '진행' || t < r.startDate || t > r.endDate) throw new AppError('지금은 투표 기간이 아닙니다.');
+  ids = [].concat(ids || []).filter(function (id, i, a) { return a.indexOf(id) === i; });
+  var max = Number(r.maxVotes) || 3;
+  if (ids.length > max) throw new AppError('최대 ' + max + '권까지 고를 수 있습니다.');
+  if (ids.some(function (id) { return (r.candidates || []).indexOf(id) < 0; })) throw new AppError('투표 후보가 아닌 도서가 있습니다.');
+  var b = rows_('ballots').filter(function (x) { return x.roundId === roundId && normEmp_(x.empNo) === who.empNo; })[0];
+  if (!b) b = { roundId: roundId, empNo: who.empNo };
+  b.choices = ids; b.at = nowIso_();
+  save_('ballots', b);
+  syncVotes_(r);
+  return roundView_(r, who.empNo);
+}
+function syncVotes_(r) {
+  var counts = tally_(r.id), changed = [];
+  rows_('requests').forEach(function (q) { if ((r.candidates || []).indexOf(q.id) >= 0 && (q.votes || 0) !== (counts[q.id] || 0)) { q.votes = counts[q.id] || 0; changed.push(q); } });
+  save_('requests', changed);
+}
+function myBallot_(roundId, empNo) { var r = rows_('rounds').filter(function (x) { return x.id === roundId; })[0]; employee_(empNo); return roundView_(r, empNo); }
+
+// ─── 관리자 ──────────────────────────────────────────
+function adminWish_() {
+  var reqs = rows_('requests').slice().sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).map(function (r) {
+    var v = requestView_(r, true); v.owned = REQ_OPEN.indexOf(r.status) >= 0 ? ownedMatch_(r.title) : null; return v;
+  });
+  var rounds = rows_('rounds').slice().sort(function (a, b) { return String(b.createdAt).localeCompare(String(a.createdAt)); }).map(function (r) { return roundView_(r); });
+  return { requests: reqs, rounds: rounds };
+}
+function updateRequest_(id, patch) {
+  var r = rows_('requests').filter(function (x) { return x.id === id; })[0];
+  if (!r) throw new AppError('신청 정보를 찾을 수 없습니다.');
+  if (patch.status && ['접수', '투표중', '투표완료', '구매확정', '구매완료', '반려', '보유중'].indexOf(patch.status) < 0) throw new AppError('알 수 없는 상태입니다.');
+  ['status', 'adminMemo', 'title', 'author', 'publisher'].forEach(function (k) { if (patch[k] !== undefined) r[k] = String(patch[k]); });
+  if (patch.status) r.decidedAt = nowIso_();
+  save_('requests', r);
+  return requestView_(r, true);
+}
+function createRound_(input, admin) {
+  var ids = [].concat(input.candidates || []);
+  if (ids.length < 1) throw new AppError('투표 후보 도서를 1권 이상 골라 주세요.');
+  if (currentRound_()) throw new AppError('이미 진행 중인 투표가 있습니다. 마감한 뒤 새 투표를 만들어 주세요.');
+  var reqs = rows_('requests').filter(function (r) { return ids.indexOf(r.id) >= 0; });
+  var start = input.startDate || today_(), end = input.endDate || addDays_(start, 7);
+  if (end < start) throw new AppError('마감일이 시작일보다 빠릅니다.');
+  var r = { id: uid_(), title: String(input.title || '').trim() || (start.slice(0, 7).replace('-', '년 ') + '월 희망도서 투표'), startDate: start, endDate: end,
+    maxVotes: Math.max(1, Math.min(10, Number(input.maxVotes) || 1)), buyCount: Number(input.buyCount) || 0, candidates: ids.filter(function (id) { return reqs.some(function (x) { return x.id === id; }); }),
+    status: '진행', createdAt: nowIso_(), createdBy: admin || '', result: null };
+  save_('rounds', r);
+  reqs.forEach(function (x) { x.status = '투표중'; x.roundId = r.id; x.votes = 0; });
+  save_('requests', reqs);
+  return roundView_(r);
+}
+function closeRound_(id) {
+  var r = rows_('rounds').filter(function (x) { return x.id === id; })[0];
+  if (!r) throw new AppError('투표를 찾을 수 없습니다.');
+  var counts = tally_(r.id);
+  var reqs = rows_('requests').filter(function (x) { return (r.candidates || []).indexOf(x.id) >= 0; });
+  reqs.sort(function (a, b) { return (counts[b.id] || 0) - (counts[a.id] || 0) || String(a.createdAt).localeCompare(String(b.createdAt)); });
+  // 투표 결과는 구매 심사 참고용: 자동으로 구매확정하지 않고 '투표완료'로 둔다
+  reqs.forEach(function (x) {
+    x.votes = counts[x.id] || 0;
+    if (x.status === '투표중') { x.status = '투표완료'; x.decidedAt = nowIso_(); }
+  });
+  save_('requests', reqs);
+  r.status = '마감';
+  r.result = { voters: voterCount_(r.id), ranking: reqs.map(function (x) { return { id: x.id, title: x.title, votes: x.votes, status: x.status }; }), closedAt: nowIso_() };
+  save_('rounds', r);
+  return roundView_(r);
+}
+// 투표 마감일이 지난 진행 중 투표는 매일 자동 마감
+function autoCloseRounds_() {
+  var t = today_(), n = 0;
+  rows_('rounds').forEach(function (r) { if (r.status === '진행' && r.endDate && r.endDate < t) { closeRound_(r.id); n++; } });
+  return n;
+}
+
+// 도서 등록 시: 같은 책을 구매확정·신청한 사람에게 입고 알림
+function fulfillRequests_(created) {
+  if (!created || !created.length) return 0;
+  var b = created[0];
+  var nt = normTitle_(b.title), q = bigrams_(b.title);
+  var hit = rows_('requests').filter(function (r) { return REQ_OPEN.indexOf(r.status) >= 0 && (normTitle_(r.title) === nt || sim_(q, bigrams_(r.title)) >= 0.85); });
+  hit.forEach(function (r) {
+    r.status = '구매완료'; r.bookCode = b.code; r.decidedAt = nowIso_();
+    var e = r.empNo && empMap_()[normEmp_(r.empNo)];
+    if (e && e.email) {
+      var s = settings_();
+      try {
+        sendMail_({ type: '희망도서입고', to: String(e.email).trim(), subject: '[' + s.libraryName + '] 신청하신 「' + b.title + '」이(가) 들어왔어요',
+          html: layout_('신청하신 책이 들어왔어요', '<p>' + esc_(String(e.name).trim()) + '님이 신청하신 <b>「' + esc_(b.title) + '」</b>(도서코드 ' + esc_(b.code) + ')이 등록되었습니다.</p><p>사이트에서 바로 대출 신청하실 수 있습니다.' + (props_().getProperty('WEBAPP_URL') ? ' <a href="' + esc_(props_().getProperty('WEBAPP_URL')) + '">오스템문고 바로가기</a>' : '') + '</p>') });
+      } catch (err) { console.error('fulfill mail', err); }
+    }
+  });
+  save_('requests', hit);
+  return hit.length;
+}
+
+// ===== Insights.gs =====
+// ─────────────────────────────────────────────────────
+// 운영자 인사이트: 자주 찾지만 보유가 적은 주제 → 구매 우선순위 제안
+// ─────────────────────────────────────────────────────
+function ownedForTerm_(corpus, term) {
+  var n = normStr_(term); if (n.length < 2) return 0;
+  return corpus.filter(function (d) { return d.title.indexOf(n) >= 0 || d.catName.indexOf(n) >= 0 || d.desc.indexOf(n) >= 0; }).length;
+}
+
+function insights_(days) {
+  days = Math.max(7, Math.min(365, Number(days) || 90));
+  var since = addDays_(today_(), -days);
+  var logs = rows_('searchLog').filter(function (l) { return String(l.at).slice(0, 10) >= since; });
+  var rec = logs.filter(function (l) { return l.source === 'recommend'; }), srch = logs.filter(function (l) { return l.source !== 'recommend'; });
+
+  // 주제(키워드)별 집계
+  var topics = {};
+  logs.forEach(function (l) {
+    String(l.terms || '').split(' ').filter(String).forEach(function (t) {
+      var k = stripJosa_(t); if (k.length < 2) return;
+      var o = topics[k] = topics[k] || { term: k, count: 0, weak: 0, recommend: 0, search: 0 };
+      o.count++; if ((Number(l.hits) || 0) <= 2) o.weak++;
+      if (l.source === 'recommend') o.recommend++; else o.search++;
+    });
+  });
+  var corpus = corpus_();
+  var reqs = rows_('requests');
+  var list = Object.keys(topics).map(function (k) { return topics[k]; }).filter(function (o) { return o.count >= 2; });
+  list.forEach(function (o) {
+    o.owned = ownedForTerm_(corpus, o.term);
+    var n = normStr_(o.term);
+    var rel = reqs.filter(function (r) { return normStr_(r.title + ' ' + r.reason).indexOf(n) >= 0; });
+    o.requests = rel.length;
+    o.votes = rel.reduce(function (s, r) { return s + (Number(r.votes) || 0); }, 0);
+    // 수요(검색·추천·신청·득표) 대비 보유가 적을수록 높은 점수
+    o.priority = Math.round(((o.count + o.weak) + o.requests * 3 + o.votes * 2) / (1 + o.owned) * 10) / 10;
+  });
+  var gaps = list.filter(function (o) { return o.owned <= 3; }).sort(function (a, b) { return b.priority - a.priority || b.count - a.count; }).slice(0, 20);
+
+  // 직무·고민 분포
+  var jobs = {}, sits = {};
+  rec.forEach(function (l) { if (l.job) jobs[l.job] = (jobs[l.job] || 0) + 1; String(l.situations || '').split(' ').filter(String).forEach(function (s) { sits[s] = (sits[s] || 0) + 1; }); });
+  var jobName = {}; JOB_GROUPS.forEach(function (j) { jobName[j.id] = j.name; });
+  var sitName = {}; SITUATIONS.forEach(function (s) { sitName[s.id] = s.label; });
+
+  // 구매 우선순위 제안: 희망도서(득표·신청) + 수요 높은 미보유 주제
+  var wish = reqs.filter(function (r) { return REQ_OPEN.indexOf(r.status) >= 0; }).map(function (r) {
+    var n = normStr_(r.title + ' ' + r.reason);
+    var demand = list.filter(function (o) { return n.indexOf(normStr_(o.term)) >= 0; }).reduce(function (s, o) { return s + o.count; }, 0);
+    return { kind: 'request', id: r.id, title: r.title, author: r.author, status: r.status, votes: Number(r.votes) || 0, demand: demand, score: (Number(r.votes) || 0) * 3 + demand + (r.status === '구매확정' ? 100 : 0) };
+  }).sort(function (a, b) { return b.score - a.score; });
+
+  return {
+    days: days, since: since,
+    totals: { recommend: rec.length, search: srch.length, weakRecommend: rec.filter(function (l) { return (Number(l.hits) || 0) < 3; }).length, zeroSearch: srch.filter(function (l) { return !(Number(l.hits) || 0); }).length,
+      requests: reqs.filter(function (r) { return String(r.createdAt).slice(0, 10) >= since; }).length },
+    gaps: gaps,
+    jobs: Object.keys(jobs).map(function (k) { return { name: jobName[k] || k, count: jobs[k] }; }).sort(function (a, b) { return b.count - a.count; }),
+    situations: Object.keys(sits).map(function (k) { return { name: sitName[k] || k, count: sits[k] }; }).sort(function (a, b) { return b.count - a.count; }),
+    wish: wish.slice(0, 20),
+  };
+}
+
+// ===== Code.gs =====
+
+// 웹앱 진입점 + 화면에서 호출하는 API
+function doGet(e) {
+  var t = HtmlService.createTemplateFromFile('Index');
+  t.boot = JSON.stringify({ url: ScriptApp.getService().getUrl() });
+  try { var u = ScriptApp.getService().getUrl(); if (u && props_().getProperty('WEBAPP_URL') !== u) props_().setProperty('WEBAPP_URL', u); } catch (err) {}
+  return t.evaluate()
+    .setTitle(settings_().libraryName)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setFaviconUrl('https://www.gstatic.com/images/icons/material/system/2x/menu_book_black_24dp.png')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+}
+
+// GitHub Pages 등 외부 화면에서 쓰는 JSON API (POST, Content-Type: text/plain → CORS 사전요청 없이 호출)
+function doPost(e) {
+  var out;
+  try {
+    var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    out = rpc(String(body.name || ''), body.args || [], body.token || '');
+  } catch (err) {
+    out = JSON.stringify({ ok: false, error: '요청 형식이 올바르지 않습니다.' });
+  }
+  return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
+}
+
+// 사용자 기능
+var PUBLIC_API = {
+  config: function () {
+    var s = settings_();
+    return { libraryName: s.libraryName, location: s.location, managerName: s.managerName, managerPhone: s.managerPhone, managerEmail: s.managerEmail,
+      loanDays: s.loanDays, extendDays: s.extendDays, maxExtensions: s.maxExtensions, maxLoansPerUser: s.maxLoansPerUser, notice: s.notice, today: today_() };
+  },
+  catalog: function () { return catalog_(); },
+  title: function (key) { return titleDetail_(key); },
+  whoami: function (empNo) { return whoAmI_(empNo); },
+  me: function (empNo) { return myPage_(empNo); },
+  apply: function (key, empNo) { return withLock_(function () { return applyLoan_(key, empNo); }); },
+  returnBook: function (loanId, empNo) { return withLock_(function () { return requestReturn_(loanId, empNo); }); },
+  extend: function (loanId, empNo) { return withLock_(function () { return requestExtend_(loanId, empNo); }); },
+  reserve: function (key, empNo) { return withLock_(function () { return reserve_(key, empNo); }); },
+  cancelReservation: function (id, empNo) { return withLock_(function () { return cancelReservation_(id, empNo, false); }); },
+  recommendOptions: function () { return recommendOptions_(); },
+  recommend: function (input) { return recommend_(input); },
+  logSearch: function (q, count) { return logCatalogSearch_(q, count); },
+  wishBoard: function () { return wishBoard_(); },
+  submitRequest: function (input, empNo, force) { return withLock_(function () { return submitRequest_(input, empNo, force); }); },
+  vote: function (roundId, ids, empNo) { return withLock_(function () { return vote_(roundId, ids, empNo); }); },
+  myBallot: function (roundId, empNo) { return myBallot_(roundId, empNo); },
+  login: function (password, name) {
+    var pw = props_().getProperty('ADMIN_PASSWORD') || INITIAL_ADMIN_PASSWORD;
+    if (String(password) !== pw) { Utilities.sleep(800); throw new AppError('비밀번호가 올바르지 않습니다.'); }
+    var token = Utilities.getUuid();
+    CacheService.getScriptCache().put('adm_' + token, String(name || '관리자').trim() || '관리자', 21600);
+    return { token: token, isInitialPassword: pw === INITIAL_ADMIN_PASSWORD };
+  },
+};
+
+// 관리자 기능 (토큰 필요)
+var ADMIN_API = {
+  dashboard: function () { return dashboard_(); },
+  lookup: function (input) { return { results: searchBooks_(input), providers: providers_() }; },
+  classify: function (input) { return classify_(input); },
+  addBooks: function (input) { return withLock_(function () { return { created: addBooks_(input) }; }); },
+  books: function (q) { return adminBooks_(q); },
+  updateBook: function (code, patch) { return withLock_(function () { return updateBook_(code, patch); }); },
+  loans: function (status, q) { return adminLoans_(status, q); },
+  createLoan: function (code, empNo, date) { return withLock_(function () { return adminCreateLoan_(code, empNo, date); }); },
+  confirmReturn: function (ids) { return withLock_(function () { return confirmReturn_(ids, CURRENT_ADMIN); }); },
+  extendLoan: function (id, approve) { return withLock_(function () { return adminExtend_(id, approve); }); },
+  setLoanStatus: function (id, status) { return withLock_(function () { return setLoanStatus_(id, status); }); },
+  updateLoan: function (id, patch) { return withLock_(function () { return updateLoan_(id, patch); }); },
+  cancelReservation: function (id) { return withLock_(function () { return cancelReservation_(id, null, true); }); },
+  mailPreview: function () { return runReminders_(true, true); },
+  mailRun: function () { return withLock_(function () { return runReminders_(true, false); }); },
+  mailTest: function (to) { return sendMail_({ type: '테스트', to: to, subject: '[' + settings_().libraryName + '] 테스트 메일', html: layout_('메일 발송 테스트', '<p>이 메일이 보이면 자동 발송이 정상입니다.</p>') }); },
+  mailLog: function () { return tail_('mailLog', 200).reverse().map(function (m) { return { at: m.at, type: m.type, to: m.to.map(maskEmail_), subject: m.subject, status: m.status, error: m.error }; }); },
+  mailBody: function (at, subject) { var m = tail_('mailLog', 400).filter(function (x) { return x.at === at && x.subject === subject; })[0]; return m ? m.html : ''; },
+  categories: function () {
+    var counts = {}; rows_('books').forEach(function (b) { counts[b.catCode] = (counts[b.catCode] || 0) + 1; });
+    return { categories: categories_(), counts: counts };
+  },
+  nextCategoryCode: function (g) { return nextCategoryCode_(g); },
+  addCategory: function (code, name, kw) { return withLock_(function () { return addCategory_(code, name, kw); }); },
+  setCategoryView: function (code, view) { return withLock_(function () { return setCategoryView_(code, view); }); },
+  updateCategory: function (code, kw) { return withLock_(function () { return updateCategory_(code, kw); }); },
+  settings: function () {
+    var k = apiKeys_();
+    return { settings: settings_(), providers: providers_(), keys: { kakao: k.kakao ? '설정됨' : '', nl: k.nl ? '설정됨' : '', naverId: k.naverId ? '설정됨' : '' },
+      dbUrl: db_().getUrl(), storage: props_().getProperty('STORAGE_INFO') || '', quota: mailQuota_(), webUrl: props_().getProperty('WEBAPP_URL') || '' };
+  },
+  saveSettings: function (s) {
+    var cur = settings_();
+    Object.keys(s).forEach(function (k) { if (k === 'mail') Object.keys(s.mail).forEach(function (m) { cur.mail[m] = s.mail[m]; }); else if (k in DEFAULT_SETTINGS) cur[k] = s[k]; });
+    saveSettings_(cur);
+    if (s.mail && s.mail.sendHour !== undefined) installTriggers_();
+    return cur;
+  },
+  saveKeys: function (keys) {
+    var map = { kakao: 'KAKAO_REST_KEY', nl: 'NL_CERT_KEY', naverId: 'NAVER_CLIENT_ID', naverSecret: 'NAVER_CLIENT_SECRET' };
+    Object.keys(map).forEach(function (k) { if (keys[k]) props_().setProperty(map[k], String(keys[k]).trim()); });
+    return providers_();
+  },
+  changePassword: function (pw) { if (!pw || String(pw).length < 8) throw new AppError('비밀번호는 8자 이상으로 정해 주세요.'); props_().setProperty('ADMIN_PASSWORD', String(pw)); return { ok: true }; },
+  employeesInfo: function () {
+    var emps = rows_('employees');
+    return { count: emps.length, noEmail: emps.filter(function (e) { return !e.email; }).length, url: db_().getUrl() ? db_().getUrl() + '#gid=' + db_().getSheetByName('사원명부').getSheetId() : '' };
+  },
+  matchEmployees: function () { return withLock_(function () { return matchEmployees_(); }); },
+  importEmployees: function (rows) { return withLock_(function () { return importEmployees_(rows); }); },
+  migrate: function (overwrite) { return withLock_(function () { return migrateFromOldSheet_(!!overwrite); }); },
+  syncStatus: function () { return sheetSyncStatus_(); },
+  setSync: function (on) { return setSheetSync_(!!on); },
+  syncNow: function () { return sheetSyncJob(); },
+  wishAdmin: function () { return adminWish_(); },
+  updateRequest: function (id, patch) { return withLock_(function () { return updateRequest_(id, patch); }); },
+  createRound: function (input) { return withLock_(function () { return createRound_(input, CURRENT_ADMIN); }); },
+  closeRound: function (id) { return withLock_(function () { return closeRound_(id); }); },
+  insights: function (days) { return insights_(days); },
+  dataCheck: function () { return dataCheck_(); },
+  fixStale: function (ids) { return withLock_(function () { return fixStale_(ids, CURRENT_ADMIN + '(데이터 점검)'); }); },
+  exportData: function (kind) { return exportData_(kind); },
+  fillCovers: function () { return withLock_(function () { return fillCovers_(120); }); },
+};
+
+var CURRENT_ADMIN = '관리자';
+
+// 화면 → 서버 단일 진입점. 결과는 JSON 문자열로 돌려줌
+function rpc(name, args, token) {
+  try {
+    args = args || [];
+    var admin = null;
+    if (ADMIN_API[name]) {
+      admin = token && CacheService.getScriptCache().get('adm_' + token);
+      if (!admin) throw new AppError('관리자 로그인이 필요합니다.');
+      CURRENT_ADMIN = admin;
+      return JSON.stringify({ ok: true, data: ADMIN_API[name].apply(null, args) });
+    }
+    if (!PUBLIC_API[name]) throw new AppError('없는 기능입니다: ' + name);
+    return JSON.stringify({ ok: true, data: PUBLIC_API[name].apply(null, args) });
+  } catch (e) {
+    if (!e.app) console.error(name, e && e.stack || e);
+    return JSON.stringify({ ok: false, error: e.app ? e.message : '처리 중 오류가 발생했습니다. (' + (e && e.message) + ')', auth: /로그인이 필요/.test(e.message || '') });
+  }
+}
