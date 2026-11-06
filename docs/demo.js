@@ -70,7 +70,7 @@ window.__CATS = [["소분류","분류상세"],["100","경영/경제"],["101","CS
   };
   window.google = { script: { run: new Runner() } };
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
-  var KEY = 'osstem-demo-v9';
+  var KEY = 'osstem-demo-v10';
   window.__demoSave = function () {
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };
@@ -1607,8 +1607,18 @@ function migrateFromOldSheet_(overwrite) {
     save_('loans', lout);
     save_('books', lostBooks);
   }
+  recountLoans_();
   matchEmployees_();
   return res;
+}
+
+// 원본 시트에는 '대출횟수' 칸이 없어서, 대출 기록으로 권마다 대출 횟수를 다시 셈 ('많이 읽은 책'·인기순·추천에 사용)
+function recountLoans_() {
+  var n = {};
+  rows_('loans').forEach(function (l) { if (l.status !== 'cancelled' && l.status !== 'rejected' && l.bookCode) n[l.bookCode] = (n[l.bookCode] || 0) + 1; });
+  var changed = rows_('books').filter(function (b) { var c = n[b.code] || 0; if ((Number(b.loanCount) || 0) < c) { b.loanCount = c; return true; } return false; });
+  save_('books', changed);
+  return changed.length;
 }
 
 function headerIdx_(values, must) {
