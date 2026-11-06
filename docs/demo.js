@@ -934,7 +934,28 @@ function titleDetail_(key) {
     copies: copies, available: copies.filter(function (c) { return c.status === '대출가능'; }).length,
     waiting: rows_('reservations').filter(function (r) { return r.key === key && r.status === 'waiting'; }).length,
     loanCount: books.reduce(function (s, b) { return s + (Number(b.loanCount) || 0); }, 0), links: links_(pick('isbn'), first.title),
+    together: alsoBorrowed_(key),
   };
+}
+
+// 이 책을 빌린 사람들이 함께 많이 빌린 책 (대출 기록만으로 셈, 누가 빌렸는지는 내보내지 않음)
+function alsoBorrowed_(key) {
+  try {
+    var loans = rows_('loans').filter(function (l) { return l.status !== 'cancelled' && l.status !== 'rejected'; });
+    var who = function (l) { return l.empNo || (l.name ? l.name + '|' + l.team : ''); };
+    var readers = {};
+    loans.forEach(function (l) { if (l.titleKey === key && who(l)) readers[who(l)] = 1; });
+    var n = {}, people = {};
+    loans.forEach(function (l) {
+      var w = who(l); if (!w || !readers[w] || l.titleKey === key) return;
+      var k2 = w + '#' + l.titleKey; if (people[k2]) return; people[k2] = 1;
+      n[l.titleKey] = (n[l.titleKey] || 0) + 1;
+    });
+    var items = catalog_().items, byKey = {}; items.forEach(function (t) { byKey[t.key] = t; });
+    return Object.keys(n).filter(function (k) { return n[k] >= 2 && byKey[k]; })
+      .sort(function (a, b) { return n[b] - n[a] || (byKey[b].loanCount - byKey[a].loanCount); }).slice(0, 4)
+      .map(function (k) { var t = byKey[k]; return { key: k, title: t.title, author: t.author, isbn: t.isbn, cover: t.cover, catName: t.catName, available: t.available, copies: t.copies, earliestDue: t.earliestDue }; });
+  } catch (e) { return []; }
 }
 
 // ─── 사번 확인 (신청 전 본인 확인용) ─────────────────
@@ -1674,6 +1695,7 @@ var SITUATIONS = [
   { id: 'speak', label: '말하기·발표가 어려워요', trig: ['발표', '말하기', '말을', '말이', '말솜씨', '설명', '프레젠테이션', '피티', '스피치', '말투', '화술', '전달', '앞에서'], kw: ['말하기', '발표', '프레젠테이션', '화술', '대화', '말투', '설명', '전달'], cats: ['217', '207', '211'] },
   { id: 'people', label: '동료·상사와 관계가 힘들어요', trig: ['관계', '갈등', '인간관계', '무례', '눈치', '사이가', '사이도', '싫어하', '싫은사람', '싫은동료', '싫은상사', '미워', '미운', '얄미', '꼴보기', '괴롭', '뒷담', '서운', '따돌', '불편한사람'], weak: ['상사', '동료', '선배', '사람'], kw: ['관계', '대인', '갈등', '감정', '심리', '말투', '무례', '대화', '불편한'], cats: ['210', '404', '211'] },
   { id: 'hr', label: '인사·조직 이슈가 궁금해요', trig: ['인사', 'hr', '채용', '면접', '평가제도', '인사평가', '성과평가', '보상', '연봉', '성과관리', '조직문화', '기업문화', '노무', '근로', '이직률', '퇴사율', '인재', '직무분석', '교육담당', '몰입', '리텐션'], kw: ['인사', '채용', '평가', '보상', '조직문화', '인재', '성과', '동기', '조직', '역량', '직무'], cats: ['108', '135', '109', '117', '1008'] },
+  { id: 'sales', label: '영업·고객 만나는 게 힘들어요', trig: ['영업', '거래처', '고객사', '세일즈', '협상', '설득', '계약', '실적', '미팅', '사람대하', '사람상대', '사람만나', '대인'], kw: ['대화', '말투', '설득', '호감', '관계', '서비스', '고객'], cats: ['217', '211', '101', '106', '210'] },
   { id: 'cs', label: '고객 응대가 어려워요', trig: ['고객', '컴플레인', '클레임', '불만', '진상', '응대', '민원', '화를내', '항의'], kw: ['고객', '서비스', '응대', '불만', '감정', '설득', '대화'], cats: ['106', '101', '211', '217'] },
   { id: 'rest', label: '지치고 번아웃이 왔어요', trig: ['번아웃', '지쳐', '지침', '지쳤', '피곤', '우울', '불안', '스트레스', '무기력', '의욕', '잠이안', '불면', '가기싫', '출근하기싫', '하기싫', '퇴사'], weak: ['힘들', '힘든', '버거'], kw: ['번아웃', '마음', '회복', '위로', '쉼', '피곤', '불안', '휴식'], cats: ['404', '701', '222'] },
   { id: 'time', label: '시간 관리·습관을 잡고 싶어요', trig: ['시간관리', '시간', '일정', '미루', '루틴', '습관', '집중', '계획', '바빠', '바쁜'], kw: ['시간', '습관', '루틴', '집중', '계획', '자기관리', '성과'], cats: ['212', '205', '220', '227'] },
@@ -1687,8 +1709,29 @@ var SITUATIONS = [
   { id: 'read', label: '가볍게 읽을 책을 찾아요', trig: ['소설', '에세이', '시집', '가볍게', '재밌는', '재미있는', '힐링', '쉬어가', '머리식'], kw: ['소설', '에세이', '이야기'], cats: ['601', '602', '603', '604', '605', '607', '701', '702'] },
 ];
 
-var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요', '가장', '궁금', '궁금해요', '이슈', '바꾸고', '알고', '큰'];
+var STOPWORDS = ['싶어요', '쓰고', '읽고', '하고', '되고', '알고', '배우고', '싶다', '싶은', '어떻게', '방법', '요즘', '너무', '정말', '추천', '관련', '대한', '있는', '하는', '되고', '됐어요', '되었어요', '했어요', '해요', '합니다', '같아요', '고민', '책', '도서', '읽고', '공부', '잘하고', '잘', '좀', '더', '많이', '처음', '새로', '제가', '저는', '우리', '그리고', '그런데', '이번', '이번에', '이제', '지금', '계속', '자꾸', '항상', '것', '게', '때', '때문', '같은', '다른', '해야', '할지', '가기', '하기', '어떻게', '모르겠어요', '싶은데', '너무너무', '진짜', '그냥', '아무것', '추천해', '주세요', '있어서', '많아서', '하는', '대응', '보고', '써', '뭘', '누가', '사이', '잠이', '내면', '싫어', '싫은', '화를', '안좋아요', '못해요', '가장', '궁금', '궁금해요', '이슈', '바꾸고', '알고', '큰', '대하', '만나', '대하는', '만나는', '영업직'];
 var ENDINGS = /([가-힣]{2,}요|어야|아야|쳐야|어서|아서|돼요|와요|세요|해야|야지|건지|는지도|는데|어요|아요|여요|해요|워요|려요|에요|예요|네요|고요|지요|죠|습니다|니다|지만|는지|을까|ㄹ까|할까|한데|했는데|겠어요|싶고)$/;
+// 고민별로 먼저 권하는 책 (보유 도서 중에서 사람이 고른 목록). 이 책들을 먼저 보여 주고, 모자라면 낱말·분류로 찾은 책으로 채움
+var CURATED = {
+  newbie: ["눈치껏 못 배웁니다", "사수가 없어도 괜찮습니다", "오피스 문해력", "프로일잘러", "직장생활 정글의 법칙", "회사생활이 힘드냐고 아들러가 물었다", "일의 감각", "보이게 일하라"],
+  leader: ["처음 리더가 된 당신에게", "요즘 팀장은 이렇게 일합니다", "리더의 용기", "일을 잘 맡기는 기술", "완벽한 팀", "두려움 없는 조직", "좋은 리더를 넘어 위대한 리더로", "리더 반성문"],
+  coach: ["코칭경영의 도", "코칭의정석", "초격차", "일을 잘 맡기는 기술", "가르치기의 결", "리더의 용기"],
+  report: ["가장 쉬운 독학 페이퍼로지 보고서 첫걸음", "실무에 바로 쓰는 일잘러의 보고서 작성법", "더 프리젠테이션", "횡설수설하지 않고 정확하게 설명하는 법", "일 잘하는 사람은 단순하게 말합니다", "산으로 가지 않는 정리법", "기획의 정석", "내 문장이 그렇게 이상한가요"],
+  speak: ["횡설수설하지 않고 정확하게 설명하는 법", "한석준의 말하기 수업", "생각정리 스피치", "더 프리젠테이션", "어른의 말투", "일 잘하는 사람은 단순하게 말합니다", "말투의 편집"],
+  people: ["나는 왜 네 말이 힘들까", "무례한 사람에게 웃으며 대처하는 법", "불편한 사람과 뻔뻔하게 대화하는 법", "사무실의 도른자들", "미움받을 용기", "데일 카네기 인간관계론", "적당히 가까운 사이", "내가 예민한게 아니라 네가 너무한 거야", "그때 이렇게 화냈어야 했는데"],
+  sales: ["불편한 사람과 뻔뻔하게 대화하는 법", "끌리는 말투에는 비밀이 있다", "괜히 끌리는 사람들, 호감의 법칙", "대화의 정석", "적을 만들지 않는 대화법", "데일 카네기 인간관계론", "전화는 마케팅이다", "완벽한 서비스는 어떻게 탄생되는가", "어른의 말투"],
+  hr: ["2020 HR 메가트렌드", "비즈니스 파트너, HR 애널리틱스", "인재경영, 데이터사이언스를 만나다", "최고의 인재를 찾기 위한 단 하나의 질문", "역량평가 역량면접", "밀레니얼은 어떻게 배우고", "센 세대, 낀 세대", "MZ 익스피리언스", "직무중심 임금관리"],
+  cs: ["완벽한 서비스는 어떻게 탄생되는가", "NPS 순추천고객지수", "대화의 정석", "적을 만들지 않는 대화법", "무례한 사람에게 웃으며 대처하는 법", "불편한 사람과 뻔뻔하게 대화하는 법"],
+  rest: ["효과 빠른 번아웃 처방전", "나는 도대체 왜 피곤할까", "나를 소모하지 않는 현명한 태도에 관하여", "신영철 박사의 그냥 살자", "하버드 회복탄력성 수업", "기분이 태도가 되지 않게", "우울한 마음도 습관입니다", "하마터면 열심히 살 뻔했다"],
+  time: ["아주 작은 습관의 힘", "시간을 찾아드립니다", "생각하는 대로 해내는 시간 연금술사", "미루는 습관 극복하기", "도둑맞은 집중력", "슈퍼모닝", "하루 15분 정리의 힘", "몰입"],
+  ai: ["일 잘하는 사람은 이렇게 챗GPT를 씁니다", "된다! 하루 만에 끝내는 챗GPT 활용법", "1400만 직장인을 위한 챗GPT", "챗GPT·퍼플렉시티·클로드", "뚝딱 바로 써먹는 첫 클로드", "된다! 하루 만에 끝내는 제미나이", "비전공자도 이해할 수 있는 AI 지식", "AI 2026 트렌드"],
+  data: ["숫자는 거짓말을 한다", "하마터면 회계를 모르고 일할 뻔했다", "만화로 배우는 재무회계", "직장인이여 회계하라", "진짜 쓰는 실무 엑셀", "직장인을 위한 실무 엑셀", "데이터 리터러시", "숫자 감각의 힘"],
+  think: ["생각정리스킬", "산으로 가지 않는 정리법", "기획이란 무엇인가", "생각정리 기획력", "스마트한 생각들", "관점을 디자인하라"],
+  trend: ["트렌드 코리아 2026", "머니 트렌드 2026", "라이프 트렌드 2026", "시대예보", "AI 2026 트렌드"],
+  money: ["부자 아빠 가난한 아빠", "돈의 속성", "돈의 방정식", "존리의 부자되기 습관", "부의 갈림길", "머니 트렌드 2026"],
+  lang: ["비즈니스 영어 실수 고침 사전", "거의 모든 행동 표현의 영어"],
+  health: ["느리게 나이 드는 습관", "운동말고 움직임 리셋", "50 이후, 건강을 결정하는 7가지 습관", "건강과 다이어트를 동시에"]
+};
 // 상황을 설명하는 말일 뿐 책 주제가 아닌 단어 (제목에 있어도 점수를 적게)
 var CONTEXT_WORDS = ['상사', '동료', '선배', '후배', '사원', '회사', '직장', '업무', '팀', '팀에', '사람', '사람들', '고객', '요즘', '다시', '앞에서', '말을', '일이', '마음'];
 var JOSA = ['에서는', '으로는', '에게서', '에게', '에서', '으로', '이랑', '하고', '까지', '부터', '처럼', '이나', '이고', '하는', '해요', '은', '는', '이', '가', '을', '를', '에', '의', '도', '와', '과', '로', '랑', '만'];
@@ -1756,6 +1799,12 @@ function scoreBook_(d, prof) {
   });
   var c = prof.cats[d.t.catCode] || prof.cats[d.t.group];
   if (c) { s += c.w; why.cat = c; }
+  // 사람이 고른 책은 목록 순서대로 맨 앞에
+  var pick; for (var q = 0; q < prof.curated.length; q++) if (d.title.indexOf(prof.curated[q]) === 0) { pick = q; break; }
+  if (pick !== undefined) return { d: d, score: 100 - pick + (d.t.available > 0 ? 0.5 : 0), rel: 99, why: why, curated: true };
+  // 업무 고민에 육아·가족 책이나 소설이 끼지 않게 (본인이 그런 말을 쓴 경우는 예외)
+  if (!prof.allowFamily && (d.t.group === '1500' || /엄마|아빠|딸에게|딸은|아들|육아|아이를|부모/.test(d.t.title))) return null;
+  if (!prof.allowFiction && /^6/.test(String(d.t.group)) && prof.sits.length) return null;
   // 적은 고민을 하나도 못 알아들었으면(예: '배고프다') 직무 분야만으로 아무 책이나 추천하지 않음.
   //   이때는 직접 적은 낱말이 책 제목·소개와 두 개 이상 맞거나, 관심 키워드 칸에 적은 말이 맞을 때만 추천
   if (!prof.sits.length && prof.freeText && !kwHit && hits < 2) return null;
@@ -1788,7 +1837,14 @@ function profile_(input) {
   var modKw = {};
   if (main.length) sits.forEach(function (s) { if (s.modifier) s.kw.forEach(function (k) { modKw[normStr_(k)] = 1; }); });
   main.forEach(function (s) { s.kw.forEach(function (k) { delete modKw[normStr_(k)]; }); });
-  return { job: job, sits: sits, userTerms: userTerms, kwTerms: kwTerms, freeText: !!free.trim(), terms: terms, cats: cats, modKw: modKw };
+  var curated = [];
+  // 고민마다 한 권씩 번갈아 순서를 매김 (보고 + 신입이면 보고 1, 신입 1, 보고 2 …)
+  var lists = (main.length ? main : sits).map(function (x) { return (CURATED[x.id] || []).map(function (t) { return normStr_(t); }); });
+  for (var k = 0; k < 12; k++) lists.forEach(function (l) { if (l[k] !== undefined && curated.indexOf(l[k]) < 0) curated.push(l[k]); });
+  var raw = free + ' ' + String(input.keywords || '');
+  return { job: job, sits: sits, userTerms: userTerms, kwTerms: kwTerms, freeText: !!free.trim(), terms: terms, cats: cats, modKw: modKw, curated: curated,
+    allowFamily: /엄마|아빠|딸|아들|육아|아이|부모|가족|자녀/.test(raw),
+    allowFiction: sits.some(function (x) { return x.id === 'read'; }) || /소설/.test(raw) };
 }
 
 function reasonOf_(x, prof) {
@@ -1830,9 +1886,11 @@ function recommend_(input) {
   function seriesKey(t) { return normTitle_(t.title).replace(/[0-9]+(권|부|편)?$/, '').replace(/(상|하|上|下)$/, '').slice(0, 6); }
   function free(y) { return !used[y.d.t.key] && !seenSeries[seriesKey(y.d.t)]; }
   function take(y) { used[y.d.t.key] = 1; seenSeries[seriesKey(y.d.t)] = 1; }
+  var skip = Math.max(0, Number(input.page) || 0) * 3; // [다른 책 보기]를 누를 때마다 다음 3권
   for (var i = 0; i < ranked.length && cards.length < 3; i++) {
     var x = ranked[i];
     if (!free(x)) continue;
+    if (skip > 0) { skip--; take(x); continue; }
     take(x);
     var card = bookCard_(x, prof);
     if (x.d.t.available <= 0) {
@@ -1847,7 +1905,7 @@ function recommend_(input) {
   }
   logSearch_({ source: 'recommend', job: prof.job ? prof.job.id : '', situations: prof.sits.map(function (s) { return s.id; }), terms: prof.userTerms, hits: ranked.length, topScore: ranked[0] ? Math.round(ranked[0].rel * 10) / 10 : 0 });
   return {
-    cards: cards, matched: ranked.length,
+    cards: cards, matched: ranked.length, page: Number(input.page) || 0, more: ranked.length > (Number(input.page) || 0) * 3 + 6,
     understood: { job: prof.job ? prof.job.name : '', situations: prof.sits.map(function (s) { return s.label; }), keywords: prof.userTerms },
     weak: ranked.length < 3,
     unclear: prof.freeText && !prof.sits.length && !cards.length,

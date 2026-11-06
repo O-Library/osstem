@@ -115,6 +115,25 @@ label.f { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-we
 .seg button.on { background: var(--primary); color: #fff; }
 .chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--ink-2); cursor: pointer; }
 
+.rec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; margin: 0 0 12px; }
+.rec-head .pill { margin: 0; }
+.rec-more { text-align: center; margin: 16px 0 4px; }
+.together { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
+.together h3 { font-size: 14px; font-weight: 800; margin: 0 0 10px; }
+.tg-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tg { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: grid; gap: 6px; font: inherit; }
+.tg .cover { aspect-ratio: 2 / 3; }
+.tg .t { font-size: 12px; font-weight: 700; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 600px) { .tg-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.strip { margin: 0 0 26px; }
+.strip-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.strip-h h2 { font-size: 18px; font-weight: 800; }
+.strip-row { display: grid; grid-auto-flow: column; grid-auto-columns: 112px; gap: 14px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; }
+.sbook { position: relative; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: grid; gap: 6px; font: inherit; scroll-snap-align: start; }
+.sbook .rank { position: absolute; left: -2px; top: -4px; z-index: 2; background: var(--ink); color: #fff; font-size: 12px; font-weight: 800; min-width: 22px; height: 22px; border-radius: 11px; display: grid; place-items: center; padding: 0 6px; }
+.sbook .cover { aspect-ratio: 2 / 3; }
+.sbook .t { font-size: 12px; font-weight: 700; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 600px) { .strip-row { grid-auto-columns: 96px; } }
 .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 28px 20px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
 .seg button { border: 0; background: none; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink-3); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
@@ -577,7 +596,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
 
   async function loadCatalog(force) { if (!state.cat || force) state.cat = await api('catalog'); return state.cat; }
   async function renderCatalog() {
-    view.innerHTML = '<div class="catalog"><aside class="cats" id="cats" aria-label="분류"></aside><section><div class="toolbar" id="tb"></div><div class="shelf" id="shelf"></div><div class="more" id="more"></div></section></div>';
+    view.innerHTML = '<div class="catalog"><aside class="cats" id="cats" aria-label="분류"></aside><section><div id="strip"></div><div class="toolbar" id="tb"></div><div class="shelf" id="shelf"></div><div class="more" id="more"></div></section></div>';
     if (!state.cat) $('#shelf').innerHTML = '<div class="empty" style="grid-column:1/-1">도서 목록을 불러오는 중…</div>';
     await loadCatalog();
     drawCatalog();
@@ -622,6 +641,10 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     $('#tb').innerHTML = `<h2>${esc(label)}</h2><span class="count">${list.length.toLocaleString()}종</span><span class="spacer"></span><label class="chk"><input type="checkbox" id="avail" ${f.avail ? 'checked' : ''}> 지금 빌릴 수 있는 책만</label><span class="seg" role="group" aria-label="보기 방식"><button type="button" data-layout="grid" class="${f.layout === 'grid' ? 'on' : ''}" aria-pressed="${f.layout === 'grid'}"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>표지형</button><button type="button" data-layout="list" class="${f.layout === 'list' ? 'on' : ''}" aria-pressed="${f.layout === 'list'}"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="2" rx="1"/><rect x="1" y="7" width="14" height="2" rx="1"/><rect x="1" y="12" width="14" height="2" rx="1"/></svg>목록형</button></span>`;
     $$('#tb [data-layout]').forEach((b) => b.onclick = () => { f.layout = b.dataset.layout; sstore.set('lib.layout', f.layout); f.shown = f.layout === 'list' ? 100 : 48; drawCatalog(); });
     $('#avail').onchange = (e) => { f.avail = e.target.checked; f.shown = 48; drawCatalog(); };
+    // 첫 화면(전체·검색 없음)에만: 많이 빌려 간 책 10권을 한 줄로
+    const home = !f.q && !f.group && !f.avail;
+    $('#strip').innerHTML = home ? `<div class="strip"><div class="strip-h"><h2>많이 빌려 간 책</h2><span class="small muted">지금까지 대출 횟수 기준</span></div><div class="strip-row">${state.cat.items.slice().sort((a, b) => b.loanCount - a.loanCount).slice(0, 10).map((t, i) => `<button class="sbook" data-key="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기"><span class="rank">${i + 1}</span>${coverHTML(t, '')}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : '';
+    $$('#strip .sbook').forEach((b) => b.onclick = () => openBook(b.dataset.key));
     const empty = `<div class="empty" style="grid-column:1/-1">${f.q ? `'${esc(f.q)}'(으)로 찾은 책이 없어요.` : '찾는 책이 없습니다.'} 검색어를 줄이거나 다른 분류를 선택해 보세요.${f.q ? `<div style="margin:14px 0 6px"><button class="btn primary" type="button" id="toRec">‘${esc(f.q)}’ 관련 책 추천받기</button></div>` : ''}<span class="small">읽고 싶은 책은 <a href="#/wish">희망도서</a>로 신청해 주세요. 임직원 투표 결과를 구매 심사에 반영합니다.</span></div>`;
     $('#shelf').className = 'shelf' + (f.layout === 'list' ? ' list' : '');
     if (f.layout === 'list') {
@@ -671,9 +694,10 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       <dl class="kv"><dt>분류</dt><dd>${esc(b.groupName)} › ${esc(b.catName)}</dd>
         <dt>도서코드</dt><dd><div class="copies">${b.copies.map((c) => `<span class="copy"><b class="code">${esc(c.code)}</b>${c.status === '대출가능' ? '<span class="pill ok">가능</span>' : `<span class="pill ${c.status === '분실' ? 'bad' : 'warn'}">${esc(c.status)}</span>`}</span>`).join('')}</div></dd>
         ${b.pubDate ? `<dt>출간</dt><dd>${esc(String(b.pubDate).slice(0, 10))}</dd>` : ''}${b.isbn ? `<dt>ISBN</dt><dd>${esc(b.isbn)}</dd>` : ''}<dt>누적 대출</dt><dd>${b.loanCount}회</dd></dl>
-      ${b.description ? `<div class="desc">${esc(b.description)}</div>` : '<p class="small muted">책 소개 정보가 없습니다. 아래 링크에서 자세히 볼 수 있습니다.</p>'}
+      ${b.description ? `<div class="desc">${esc(b.description)}</div>` : ''}
       <div class="row"><a class="btn sm" href="${esc(b.links.kyobo)}" target="_blank" rel="noopener">교보문고에서 보기</a><a class="btn sm" href="${esc(b.links.nl)}" target="_blank" rel="noopener">국립중앙도서관</a></div>
-      </div></div><div class="apply" id="apply"></div>`;
+      </div></div><div class="apply" id="apply"></div>${(b.together || []).length ? `<div class="together"><h3>이 책을 빌린 분들이 함께 빌린 책</h3><div class="tg-row">${b.together.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''}`;
+    $$('[data-tg]', body).forEach((x) => x.onclick = () => openBook(x.dataset.tg));
     const ap = $('#apply', body);
     if (mine) { ap.innerHTML = `<p>대출 중인 책입니다. 반납예정일은 <b>${pretty(mine.dueDate)}</b>입니다. <a href="#/me">내 대출 보기</a></p>`; return; }
     if (myRes && !canBorrow) { ap.innerHTML = `<p>예약 ${myRes.rank}번째 순서로 기다리는 중입니다. 반납되면 메일로 알려드립니다.</p>`; return; }
@@ -768,7 +792,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         </ul>
       </section>
       <div class="g2-more">
-        <a class="g2-card" href="#/recommend"><img src="${LEO}" alt=""><div><b>책 추천</b><span>직무와 고민을 고르면 레오거가 3권을 골라 드려요.</span></div></a>
+        <a class="g2-card" href="#/recommend"><img src="${LEO}" alt=""><div><b>책 추천</b><span>고민을 고르면 읽어 볼 만한 책 3권을 보여 드려요.</span></div></a>
         <a class="g2-card" href="#/wish"><div class="g2-ico" aria-hidden="true">✚</div><div><b>희망도서 · 투표</b><span>읽고 싶은 책을 신청하세요. 투표 결과는 구매 심사에 반영해요.</span></div></a>
       </div>
       <section class="panel g2-contact"><div><h2>문의</h2><p>${esc(c.managerName)}${c.managerPhone ? ` · ${esc(c.managerPhone)}` : ''}${c.managerEmail ? `<br><span class="small muted">${esc(c.managerEmail)}</span>` : ''}</p></div>
@@ -827,8 +851,8 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     const top = ['newbie', 'leader', 'report', 'speak', 'ai', 'data', 'rest'];
     const m = modal(`<div class="promo">
       <div class="promo-hero"><div><div class="promo-eyebrow">책 추천</div>
-      <h2>지금 나에게 필요한 책, 레오거가 골라 드려요</h2></div><img class="promo-leo" src="${LEO}" alt="책 읽는 레오거"></div>
-      <p class="small muted" style="margin:4px 0 14px">직무와 고민을 고르거나 적어 주면 오스템문고 보유 도서 중 3권을 골라 드려요. 대출 중이면 바로 빌릴 수 있는 책도 함께요.</p>
+      <h2>요즘 고민, 책으로 풀어 볼까요?</h2></div><img class="promo-leo" src="${LEO}" alt="책 읽는 레오거"></div>
+      <p class="small muted" style="margin:4px 0 14px">고민을 고르거나 적어 주시면 오스템문고에 있는 책 3권을 보여 드려요.</p>
       <div class="small" style="font-weight:700;margin-bottom:6px">내 업무 그룹</div>
       <div class="chips">${o.jobs.map((j) => `<button type="button" class="chip" data-pj="${j.id}">${esc(j.name)}</button>`).join('')}</div>
       <div class="small" style="font-weight:700;margin:14px 0 6px">요즘 고민</div>
@@ -854,7 +878,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     const f = state.rec || (state.rec = { job: '', situations: [], situation: '', keywords: '' });
     view.innerHTML = `<div class="rec">
       <section class="panel rec-form">
-        <div class="rec-head"><h2>나에게 맞는 책 찾기</h2></div>
+        <div class="rec-head"><h2>고민별 책 찾기</h2></div>
         <h3 class="step"><span>1</span>직무 그룹 <em>선택</em></h3>
         <div class="choices" role="radiogroup" aria-label="직무 그룹">${o.jobs.map((j) => `<button type="button" class="choice ${f.job === j.id ? 'on' : ''}" data-job="${j.id}" role="radio" aria-checked="${f.job === j.id}"><b>${esc(j.name)}</b><span>${esc(j.desc)}</span></button>`).join('')}</div>
         <h3 class="step"><span>2</span>요즘 고민 <em>여러 개 골라도 돼요</em></h3>
@@ -864,15 +888,16 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         <input class="in" id="recKw" value="${esc(f.keywords)}" placeholder="예) 협상, 엑셀, 리더십" maxlength="80">
         <button class="btn primary lg" id="recGo" style="width:100%;margin-top:18px">책 3권 추천받기</button>
       </section>
-      <section id="recOut" class="rec-out"><div class="rec-empty"><img class="rec-leo" src="${LEO}" alt="책 읽는 레오거"><b>직무와 고민을 알려주시면 레오거가 골라 드려요</b><span>오스템문고 보유 도서 중에서 3권을 골라<br>지금 빌릴 수 있는지도 함께 알려드려요.</span></div></section>
+      <section id="recOut" class="rec-out"><div class="rec-empty"><img class="rec-leo" src="${LEO}" alt="책 읽는 레오거"><b>요즘 고민을 골라 보세요</b><span>오스템문고에 있는 책 중에서 3권을 보여 드려요.<br>지금 빌릴 수 있는지도 함께 나와요.</span></div></section>
     </div>`;
     $$('[data-job]').forEach((b) => b.onclick = () => { f.job = f.job === b.dataset.job ? '' : b.dataset.job; $$('[data-job]').forEach((x) => { const on = x.dataset.job === f.job; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); }); });
     $$('[data-sit]').forEach((b) => b.onclick = () => { const id = b.dataset.sit; f.situations = f.situations.includes(id) ? f.situations.filter((x) => x !== id) : f.situations.concat(id); b.classList.toggle('on'); b.setAttribute('aria-pressed', f.situations.includes(id)); });
     const go = async () => {
       f.situation = $('#recSit').value.trim(); f.keywords = $('#recKw').value.trim();
       const out = $('#recOut');
-      out.innerHTML = `<div class="rec-empty"><img class="rec-leo" src="${LEO}" alt=""><span>레오거가 보유 도서를 살펴보는 중…</span></div>`;
-      try { const r = await api('recommend', { job: f.job, situations: f.situations, situation: f.situation, keywords: f.keywords }); drawRecs(r); }
+      out.innerHTML = `<div class="rec-empty"><img class="rec-leo" src="${LEO}" alt=""><span>책을 찾고 있어요…</span></div>`;
+      f.page = 0;
+      try { const r = await api('recommend', { job: f.job, situations: f.situations, situation: f.situation, keywords: f.keywords }); drawRecs(r, f); }
       catch (e) { out.innerHTML = `<div class="rec-empty"><span>${esc(e.message)}</span></div>`; }
     };
     $('#recGo').onclick = go;
@@ -884,14 +909,13 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     return `<article class="reccard">
       <button class="rc-cover" data-key="${esc(c.key)}" aria-label="${esc(c.title)} 상세보기">${coverHTML(c, '', true)}</button>
       <div class="rc-body">
-        <div class="rc-no">추천 ${i + 1}</div>
-        <h3><button class="linklike" data-key="${esc(c.key)}">${esc(c.title)}</button></h3>
+                <h3><button class="linklike" data-key="${esc(c.key)}">${esc(c.title)}</button></h3>
         <div class="small muted">${esc(c.author || c.publisher || '')} · ${esc(c.catName)}</div>
         <div class="row">${availPill(c)}<span class="spacer"></span><button class="btn sm ${c.available > 0 ? 'primary' : ''}" data-key="${esc(c.key)}">${cta}</button></div>
-        ${c.alt ? `<div class="rc-alt"><div class="small"><b>지금 바로 빌릴 수 있는 대체 도서</b></div><button class="altbook" data-key="${esc(c.alt.key)}"><b>${esc(c.alt.title)}</b><span class="small muted">${esc(c.alt.author || c.alt.publisher || '')}</span></button><div>${availPill(c.alt)}</div></div>` : ''}
+        ${c.alt ? `<div class="rc-alt"><div class="small"><b>지금 빌릴 수 있는 비슷한 책</b></div><button class="altbook" data-key="${esc(c.alt.key)}"><b>${esc(c.alt.title)}</b><span class="small muted">${esc(c.alt.author || c.alt.publisher || '')}</span></button><div>${availPill(c.alt)}</div></div>` : ''}
       </div></article>`;
   }
-  function drawRecs(r) {
+  function drawRecs(r, f) {
     const out = $('#recOut');
     const u = r.understood;
     const gap = `<div class="panel rec-gap"><b>보유 도서 중 꼭 맞는 책이 ${r.cards.length ? '많지 않아요' : '아직 없어요'}.</b><p class="small muted" style="margin:4px 0 10px">읽고 싶은 책을 희망도서로 신청해 주세요. 임직원 투표 결과와 함께 구매 심사에 반영합니다.</p><button class="btn" id="toWish">희망도서 신청하기</button></div>`;
@@ -899,7 +923,14 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       out.innerHTML = `<div class="panel rec-gap"><b>‘${esc(r.text)}’에 맞는 책은 아직 못 찾았어요.</b><p class="small muted" style="margin:4px 0 10px">업무나 요즘 고민을 조금 더 적어 주시거나, 위에서 고민을 골라 주세요. 예) 보고서를 잘 쓰고 싶어요, 팀장이 처음이에요</p></div>`;
       out.scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
     }
-    out.innerHTML = `${r.cards.length ? `<div class="reclist">${r.cards.map(recCard).join('')}</div>` : ''}${r.weak ? gap : ''}`;
+    const head = u.situations.length ? `<div class="rec-head"><span class="small muted">이런 고민에</span>${u.situations.map((x) => `<span class="pill info">${esc(x)}</span>`).join('')}</div>` : (u.job ? `<div class="rec-head"><span class="small muted">${esc(u.job)} 직무에서 많이 찾는 책</span></div>` : '');
+    const more = r.cards.length && f ? `<div class="rec-more"><button class="btn" id="recMore">${r.more ? '다른 책 3권 보기' : '처음 3권 다시 보기'}</button></div>` : '';
+    out.innerHTML = `${r.cards.length ? `${head}<div class="reclist">${r.cards.map(recCard).join('')}</div>${more}` : ''}${r.weak && !r.page ? gap : ''}`;
+    const rm = $('#recMore', out);
+    if (rm) rm.onclick = async () => {
+      f.page = r.more ? (f.page || 0) + 1 : 0; rm.disabled = true;
+      try { drawRecs(await api('recommend', { job: f.job, situations: f.situations, situation: f.situation, keywords: f.keywords, page: f.page }), f); } catch (e) { toast(e.message, true); rm.disabled = false; }
+    };
     $$('[data-key]', out).forEach((b) => b.onclick = async () => { await loadCatalog(); openBook(b.dataset.key); });
     const tw = $('#toWish', out); if (tw) tw.onclick = () => { state.wishPrefill = { reason: [u.situations.join(', '), u.keywords.join(', ')].filter(Boolean).join(' / ') }; location.hash = '#/wish'; };
     out.scrollIntoView({ behavior: 'smooth', block: 'start' });
