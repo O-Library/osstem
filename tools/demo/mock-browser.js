@@ -67,7 +67,7 @@
   };
   window.google = { script: { run: new Runner() } };
   // 데모 상태를 이 브라우저에 저장 → 사용자/관리자 화면을 오가도 같은 데이터
-  var KEY = 'osstem-demo-v10';
+  var KEY = 'osstem-demo-v11';
   window.__demoSave = function () {
     try { var db = files.DEMO_DB; if (!db) return; localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), props: props, sheets: db.sheets.map(function (sh) { return { name: sh.name, id: sh.id, data: sh.data }; }) })); } catch (e) {}
   };

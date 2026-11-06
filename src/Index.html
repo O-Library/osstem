@@ -1180,7 +1180,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         <div class="row"><button class="btn" data-exp="books">도서 목록 (권별·현재 대출자 포함)</button><button class="btn" data-exp="loans">전체 대출 기록</button>${st.dbUrl ? `<a class="btn" href="${esc(st.dbUrl)}" target="_blank" rel="noopener">DB 시트에서 직접 받기</a>` : ''}</div><div class="small muted" id="expOut" style="margin-top:6px"></div></div>
       <div class="panel"><h2>데이터 점검</h2><p class="small muted" style="margin-top:-6px">기존 시트에서 반납 처리가 빠진 채 옮겨온 기록 등, 실제와 다를 수 있는 대출 기록을 찾습니다.</p><button class="btn" id="chk">점검 실행</button><div id="chkOut" style="margin-top:12px"></div></div>
       <div class="panel"><h2>실제 책 표지</h2><p class="small muted" style="margin-top:-6px">ISBN으로 교보문고 표지를 찾고, 없으면 Google Books(카카오 키가 있으면 카카오)에서 가져옵니다. 10분마다 120권씩 자동으로 진행됩니다.</p><button class="btn" id="covers">지금 표지 가져오기</button> <span class="small muted" id="covOut"></span></div>
-      <div class="panel"><h2>기존 시트에서 다시 가져오기</h2><p class="small muted" style="margin-top:-6px">전환 기간에 기존 「2026 오스템문고 대출현황」 시트를 계속 썼다면, 새로 생긴 도서와 반납 처리를 가져옵니다. 이미 있는 기록은 건드리지 않습니다.</p>${window.SERVER_MODE ? `<div class="grid3" style="margin-bottom:8px"><label class="f small">도서목록 CSV<input type="file" id="oBooks" accept=".csv"></label><label class="f small">대출현황 CSV<input type="file" id="oLoans" accept=".csv"></label><label class="f small">오스템도서분류 CSV (선택)<input type="file" id="oCats" accept=".csv"></label></div><p class="small muted" style="margin:0 0 8px">구글 시트에서 각 탭을 파일 → 다운로드 → CSV로 받아 고르세요.</p>` : ''}<button class="btn" id="mig">기존 시트에서 가져오기</button> <span class="small muted" id="migOut"></span></div>
+      <div class="panel"><h2>기존 시트 반영</h2><p class="small muted" style="margin-top:-6px">기존 「2026 오스템문고 대출현황」 시트에 생긴 새 대출, 반납 처리, 새 책을 가져옵니다. 사이트에서 처리한 기록은 건드리지 않아요.</p>${window.SERVER_MODE ? '' : `<div class="row" style="align-items:center;gap:10px;margin:0 0 12px"><label class="row small" style="gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="syncOn"> 5분마다 자동으로 가져오기</label><span class="small muted" id="syncInfo"></span></div><p class="small muted" style="margin:-4px 0 12px">켜 두면 시트에서 고친 도서명·저자·출판사도 사이트에 따라 바뀝니다. 시트를 더 이상 쓰지 않게 되면 꺼 주세요.</p>`}${window.SERVER_MODE ? `<div class="grid3" style="margin-bottom:8px"><label class="f small">도서목록 CSV<input type="file" id="oBooks" accept=".csv"></label><label class="f small">대출현황 CSV<input type="file" id="oLoans" accept=".csv"></label><label class="f small">오스템도서분류 CSV (선택)<input type="file" id="oCats" accept=".csv"></label></div><p class="small muted" style="margin:0 0 8px">구글 시트에서 각 탭을 파일 → 다운로드 → CSV로 받아 고르세요.</p>` : ''}<button class="btn" id="mig">지금 가져오기</button> <span class="small muted" id="migOut"></span></div>
       <div class="panel"><h2>데이터 보관 위치</h2>${st.dbUrl ? `<p class="small" style="margin:0">모든 데이터는 구글 스프레드시트 「오스템문고 시스템 DB」에 저장됩니다. 시트에서 직접 보고 고칠 수 있고, 구글 시트의 버전 기록으로 복구할 수 있습니다.</p><div class="row" style="margin-top:10px"><a class="btn" href="${esc(st.dbUrl)}" target="_blank" rel="noopener">DB 시트 열기</a></div>` : `<p class="small" style="margin:0">모든 데이터는 회사 서버의 데이터 파일에 저장되고, 매일 자동으로 백업됩니다. ${esc(st.storage || '')}</p>`}</div>`;
     $$('[data-exp]', pane).forEach((b) => b.onclick = async () => {
       const out = $('#expOut', pane); out.textContent = '만드는 중…';
@@ -1220,13 +1220,21 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       if (!confirm(`사원명부를 ${rows.length}행으로 바꿀까요? 기존 명단은 지워집니다.`)) return;
       try { const r = await api('importEmployees', rows); $('#empOut', pane).textContent = `${r.count}명 등록 · 이메일 없음 ${r.noEmail}명 · 대출 ${r.matched}건 연결`; toast('사원명부를 바꿨습니다.'); } catch (e) { toast(e.message, true); }
     };
+    const fmtAt = (v) => v ? v.slice(5, 16).replace('-', '/').replace('T', ' ') : '';
+    const showSync = (st) => { const c = $('#syncOn', pane), info = $('#syncInfo', pane); if (!c || !st) return; c.checked = !!st.on; info.textContent = st.at ? `마지막 확인 ${fmtAt(st.at)}${st.changedAt ? ` · 마지막 반영 ${fmtAt(st.changedAt)}` : ''}` : (st.on ? '곧 첫 확인을 해요' : ''); };
+    if ($('#syncOn', pane)) {
+      api('syncStatus').then(showSync).catch(() => {});
+      $('#syncOn', pane).onchange = async (e) => { try { showSync(await api('setSync', e.target.checked)); toast(e.target.checked ? '5분마다 기존 시트를 확인합니다.' : '자동 반영을 껐습니다.'); } catch (err) { e.target.checked = !e.target.checked; toast(err.message, true); } };
+    }
     $('#mig', pane).onclick = async () => {
       try {
         if (window.SERVER_MODE) {
           const [b, l, c] = await Promise.all([readFile($('#oBooks', pane)), readFile($('#oLoans', pane)), readFile($('#oCats', pane))]);
           if (b || l || c) await api('uploadOriginal', { books: b ? parseCSV(b) : null, loans: l ? parseCSV(l) : null, cats: c ? parseCSV(c) : null });
         }
-        const r = await api('migrate', false); $('#migOut', pane).textContent = `도서 ${r.books}권, 대출 ${r.loans}건 반영`; state.cat = null;
+        const r = window.SERVER_MODE ? await api('migrate', false) : await api('syncNow');
+        $('#migOut', pane).textContent = (r.books || r.loans || r.updated) ? `새 책 ${r.books}권, 대출·반납 ${r.loans}건${r.updated ? `, 도서 정보 ${r.updated}권` : ''} 반영` : '바뀐 내용이 없어요';
+        state.cat = null; if (!window.SERVER_MODE) api('syncStatus').then(showSync).catch(() => {});
       } catch (e) { toast(e.message, true); }
     };
   }
