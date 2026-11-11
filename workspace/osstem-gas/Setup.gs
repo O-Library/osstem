@@ -139,7 +139,7 @@ function migrateFromOldSheet_(overwrite) {
     var h = headerIdx_(v, '도서명');
     var g = function (r, k) { return h.map[k] === undefined ? '' : r[h.map[k]]; };
     var existing = {}; rows_('books').forEach(function (b) { existing[b.code] = b; });
-    var out = [], seen = {};
+    var out = [], seen = {}, firstRun = !Object.keys(existing).length;
     v.slice(h.row + 1).forEach(function (r) {
       var title = String(g(r, '도서명')).trim(), cat = String(g(r, '분류번호')).trim(), pno = String(g(r, '구매번호')).trim(), cno = String(g(r, '도서번호')).trim();
       if (!title || !/^\d+$/.test(cat) || !pno || !cno) return;
@@ -160,7 +160,7 @@ function migrateFromOldSheet_(overwrite) {
         if (ch) { out.push(b); res.updated = (res.updated || 0) + 1; }
         return;
       }
-      b = b || { code: code, status: 'active', createdAt: '', cover: '', description: '' };
+      b = b || { code: code, status: 'active', createdAt: firstRun ? '' : nowIso_(), cover: '', description: '' };
       b.catCode = cat; b.purchaseNo = pno; b.copyNo = cno; b.title = title; b.author = String(g(r, '저자')).trim(); b.publisher = String(g(r, '출판사')).trim(); b.isbn = isbn;
       b.loanCount = Number(g(r, '대출횟수')) || 0;
       existing[code] = b; out.push(b); res.books++;

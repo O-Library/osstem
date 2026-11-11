@@ -10,6 +10,9 @@
   old.sheets = [new M.Sheet('오스템도서분류', window.__CATS, 1), new M.Sheet('도서목록', O.books, 2), new M.Sheet('대출현황', O.loans, 3)];
   M.files.DEMO_OLD = old;
   setupImpl_();
+  // [반영!]에서 새로 확인된 책의 입고일 (원본 시트에는 입고일 칸이 없음)
+  var AR = window.__ARRIVALS || {};
+  if (Object.keys(AR).length) { _tables = {}; var nb = rows_('books').filter(function (b) { return AR[b.code]; }); nb.forEach(function (b) { b.createdAt = AR[b.code] + 'T09:00:00'; }); save_('books', nb); _tables = {}; _cats = null; }
   var db = M.files.DEMO_DB;
   var PEOPLE = [['29011301', '장유영', '인재개발팀']];
   db.getSheetByName('사원명부').data = [['사번', '성명', '소속', '이메일']].concat(PEOPLE.map(function (p) { return [p[0], p[1], p[2], 'demo-' + p[0].toLowerCase() + '@example.com']; }));

@@ -31,8 +31,13 @@ on = {r[0] for r in old['loans'] if r and str(r[0]).isdigit()}
 newloans = [r for r in loans if r and str(r[0]).isdigit() and r[0] not in on and len(r) > 2 and r[1]]
 changed = sum(1 for a, b in zip(old['loans'], loans) if a != b) - len(newloans)
 json.dump({'books': nb, 'loans': loans}, open(oldp, 'w'), ensure_ascii=False)
+arp = '/home/claude/osstem-mockup/arrivals.json'
+try: arr = json.load(open(arp))
+except Exception: arr = {}
+for k, _ in newbooks: arr.setdefault(k, day)
+json.dump(arr, open(arp, 'w'), ensure_ascii=False)
 
-def sh(c): print('$', c); subprocess.run(c, shell=True, check=True)
+def sh(c): print('$', c); subprocess.run(c, shell=True, check=True, executable='/bin/bash')
 mb = open('/home/claude/osstem-mockup/mock-browser.js').read()
 v = int(re.search(r"osstem-demo-v(\d+)", mb).group(1))
 open('/home/claude/osstem-mockup/mock-browser.js', 'w').write(mb.replace(f'osstem-demo-v{v}', f'osstem-demo-v{v+1}'))
@@ -44,6 +49,6 @@ sh('cp /home/claude/osstem-deploy/Code.gs /home/claude/osstem-server/app/Code.gs
 sh("cd /home/claude && rm -f osstem-library-server.zip && zip -qr osstem-library-server.zip osstem-server -x 'osstem-server/node_modules/*' 'osstem-server/data/*'")
 msg = f"[반영] {day} 원본 시트 기준 데이터 갱신\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01QppbGXxUWde3bhGozUET5g"
 open('/tmp/refresh-msg.txt', 'w').write(msg)
-sh("cp /home/claude/osstem-gas/*.gs /home/claude/osstem-gas/Index.html /home/claude/osstem/workspace/osstem-gas/ && cp /home/claude/osstem-mockup/{build-demo.py,mock-browser.js,seed-real.js,old.json} /home/claude/osstem/workspace/osstem-mockup/ && cp /home/claude/rebuild.sh /home/claude/refresh.py /home/claude/osstem/workspace/")
+sh("cp /home/claude/osstem-gas/*.gs /home/claude/osstem-gas/Index.html /home/claude/osstem/workspace/osstem-gas/ && cp /home/claude/osstem-mockup/{build-demo.py,mock-browser.js,seed-real.js,old.json,arrivals.json} /home/claude/osstem/workspace/osstem-mockup/ && cp /home/claude/rebuild.sh /home/claude/refresh.py /home/claude/osstem/workspace/")
 sh("cd /home/claude/osstem && git add -A && (git diff --cached --quiet || git commit -qF /tmp/refresh-msg.txt) && git push -q origin HEAD 2>&1 | grep -iv 'moved\\|location\\|O-Library/osstem.git' || true")
 print(json.dumps({'day': day, 'books': len(nc), 'newBooks': newbooks, 'newLoans': [(r[0], r[2], r[5] if len(r) > 5 else '') for r in newloans], 'changedLoans': changed}, ensure_ascii=False))

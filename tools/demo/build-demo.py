@@ -2,10 +2,11 @@ import json, re, os
 M='/home/claude/osstem-mockup'
 import json as _j
 old=_j.load(open(f'{M}/old.json')); cats=open(f'{M}/cats.json').read()
+arr=open(f'{M}/arrivals.json').read() if os.path.exists(f'{M}/arrivals.json') else '{}'
 code=open('/home/claude/osstem-deploy/Code.gs').read()
 bundle='\n'.join([
   '// 오스템문고 데모 번들: 서버(Apps Script) 코드를 브라우저 안에서 실행합니다.',
-  'window.__OLD = '+_j.dumps(old,ensure_ascii=False)+';', f'window.__CATS = {cats};',
+  'window.__OLD = '+_j.dumps(old,ensure_ascii=False)+';', f'window.__CATS = {cats};', f'window.__ARRIVALS = {arr};',
   open(f'{M}/mock-browser.js').read(), code, open(f'{M}/seed-real.js').read()])
 open('/home/claude/osstem/docs/demo.js','w').write(bundle)
 # 아티팩트 단일 페이지

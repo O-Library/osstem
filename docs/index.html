@@ -122,6 +122,7 @@ label.f { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-we
 .rec-more { text-align: center; margin: 16px 0 4px; }
 .together { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
 .together h3 { font-size: 14px; font-weight: 800; margin: 0 0 10px; }
+.newgrid { margin-bottom: 14px; }
 .tg-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .tg { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: grid; gap: 6px; font: inherit; }
 .tg .cover { aspect-ratio: 2 / 3; }
@@ -455,9 +456,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   <div class="alerts" id="alerts"></div>
   <main id="view"></main>
   <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
-  <script src="config.js?v=mw4p1ogu"></script>
+  <script src="config.js?v=mwbozixm"></script>
   <script>window.APP_MODE = 'user';</script>
-  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mw4p1ogu"><\/script>');</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mwbozixm"><\/script>');</script>
   <script>var BOOT = {};</script>
   <script>
 (() => {
@@ -648,7 +649,8 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     $('#avail').onchange = (e) => { f.avail = e.target.checked; f.shown = 48; drawCatalog(); };
     // 첫 화면(전체·검색 없음)에만: 많이 빌려 간 책 10권을 한 줄로
     const home = !f.q && !f.group && !f.avail;
-    $('#strip').innerHTML = home ? `<div class="strip"><div class="strip-h"><h2>많이 빌려 간 책</h2><span class="small muted">지금까지 대출 횟수 기준</span></div><div class="strip-row">${state.cat.items.slice().sort((a, b) => b.loanCount - a.loanCount).slice(0, 10).map((t, i) => `<button class="sbook" data-key="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기"><span class="rank">${i + 1}</span>${coverHTML(t, '')}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : '';
+    const fresh = newArrivals();
+    $('#strip').innerHTML = home ? (fresh.length ? `<div class="strip"><div class="strip-h"><h2>새로 들어온 책</h2><span class="small muted">${short(fresh[0].createdAt)} 입고 · ${fresh.length}종</span></div><div class="strip-row">${fresh.slice(0, 12).map((t) => `<button class="sbook" data-key="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '<span class="flag">신규</span>')}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : '') + `<div class="strip"><div class="strip-h"><h2>많이 빌려 간 책</h2><span class="small muted">지금까지 대출 횟수 기준</span></div><div class="strip-row">${state.cat.items.slice().sort((a, b) => b.loanCount - a.loanCount).slice(0, 10).map((t, i) => `<button class="sbook" data-key="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기"><span class="rank">${i + 1}</span>${coverHTML(t, '')}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : '';
     $$('#strip .sbook').forEach((b) => b.onclick = () => openBook(b.dataset.key));
     const empty = `<div class="empty" style="grid-column:1/-1">${f.q ? `'${esc(f.q)}'(으)로 찾은 책이 없어요.` : '찾는 책이 없습니다.'} 검색어를 줄이거나 다른 분류를 선택해 보세요.${f.q ? `<div style="margin:14px 0 6px"><button class="btn primary" type="button" id="toRec">‘${esc(f.q)}’ 관련 책 추천받기</button></div>` : ''}<span class="small">읽고 싶은 책은 <a href="#/wish">희망도서</a>로 신청해 주세요. 임직원 투표 결과를 구매 심사에 반영합니다.</span></div>`;
     $('#shelf').className = 'shelf' + (f.layout === 'list' ? ' list' : '');
@@ -683,6 +685,16 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     };
   }
 
+  // 같은 소분류 → 같은 보기 분류 → 같은 대분류 순으로, 지금 빌릴 수 있고 많이 읽힌 책 먼저
+  function relatedBooks(key, skip) {
+    const items = state.cat?.items || [], me = items.find((x) => x.key === key);
+    if (!me) return [];
+    const v = viewOf(me.catCode), no = new Set([key, ...(skip || [])]);
+    const rank = (t) => (t.catCode === me.catCode ? 3 : viewOf(t.catCode) === v ? 2 : t.group === me.group ? 1 : 0);
+    return items.filter((t) => !no.has(t.key) && rank(t) > 0)
+      .sort((a, b) => rank(b) - rank(a) || (b.available > 0) - (a.available > 0) || b.loanCount - a.loanCount).slice(0, 4);
+  }
+
   // ─── 도서 상세 + 신청 ─────────────────────────────
   async function openBook(key) {
     const body = modal('<div class="empty">불러오는 중…</div>');
@@ -701,7 +713,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         ${b.pubDate ? `<dt>출간</dt><dd>${esc(String(b.pubDate).slice(0, 10))}</dd>` : ''}${b.isbn ? `<dt>ISBN</dt><dd>${esc(b.isbn)}</dd>` : ''}<dt>누적 대출</dt><dd>${b.loanCount}회</dd></dl>
       ${b.description ? `<div class="desc">${esc(b.description)}</div>` : ''}
       <div class="row"><a class="btn sm" href="${esc(b.links.kyobo)}" target="_blank" rel="noopener">교보문고에서 보기</a><a class="btn sm" href="${esc(b.links.nl)}" target="_blank" rel="noopener">국립중앙도서관</a></div>
-      </div></div><div class="apply" id="apply"></div>${(b.together || []).length ? `<div class="together"><h3>이 책을 빌린 분들이 함께 빌린 책</h3><div class="tg-row">${b.together.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''}`;
+      </div></div><div class="apply" id="apply"></div>${(b.together || []).length ? `<div class="together"><h3>이 책을 빌린 분들이 함께 빌린 책</h3><div class="tg-row">${b.together.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''}${(() => { const rel = relatedBooks(key, (b.together || []).map((t) => t.key)); return rel.length ? `<div class="together"><h3>비슷한 분야의 책 <span class="small muted" style="font-weight:500">${esc(b.catName || '')}</span></h3><div class="tg-row">${rel.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''; })()}`;
     $$('[data-tg]', body).forEach((x) => x.onclick = () => openBook(x.dataset.tg));
     const ap = $('#apply', body);
     if (mine) { ap.innerHTML = `<p>대출 중인 책입니다. 반납예정일은 <b>${pretty(mine.dueDate)}</b>입니다. <a href="#/me">내 대출 보기</a></p>`; return; }
@@ -807,6 +819,22 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(c.managerEmail); toast('메일 주소를 복사했어요.'); } catch (e) { toast(c.managerEmail); } };
   }
 
+  // 신규 표시 기간 안에 들어온 책, 최근 입고 순
+  function newArrivals() { return (state.cat?.items || []).filter((t) => t.isNew).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || a.title.localeCompare(b.title)); }
+  // 새 책이 들어온 뒤 처음 접속하면 한 번 알려 줌 (이 브라우저 기준)
+  function newPromo(list, next) {
+    const latest = String(list[0].createdAt).slice(0, 10);
+    const m = modal(`<div class="promo">
+      <div class="promo-hero"><div><div class="promo-eyebrow">${short(latest)} 입고</div><h2>새 책 ${list.length}종이 들어왔어요</h2></div><img class="promo-leo sm" src="${LEO_HEAD}" alt=""></div>
+      <p class="small muted" style="margin:4px 0 14px">표지를 누르면 책 소개와 대출 가능 여부를 볼 수 있어요.</p>
+      <div class="tg-row newgrid">${list.slice(0, 8).map((t) => `<button class="tg" data-nk="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div>
+      ${promoFoot(true)}</div>`, 'narrow');
+    store.set('lib.newSeen', latest);
+    bindPromoFoot(m);
+    $$('[data-nk]', m).forEach((x) => x.onclick = () => { closeModal(); openBook(x.dataset.nk); });
+    $('.promo-later', m).onclick = () => { closeModal(); next(); };
+  }
+
   // ─── 접속 팝업: 구매 투표 → 책 추천 (홍보용) ─────
   const PROMO_KEY = 'osstem-promo-hide';
   const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -822,7 +850,10 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     let d = null; try { d = await api('wishBoard'); } catch (e) {}
     const next = () => { if (!promoHidden()) recPromo(); };
     // 이 브라우저에서 이번 투표에 이미 참여했으면 투표 팝업은 건너뜀 (투표 변경은 [희망도서]에서)
-    if (d && d.round && d.round.candidates.length && store.get('lib.voted') !== d.round.id) votePromo(d.round, next); else next();
+    const afterNew = () => { if (promoHidden()) return; if (d && d.round && d.round.candidates.length && store.get('lib.voted') !== d.round.id) votePromo(d.round, next); else next(); };
+    try { await loadCatalog(); } catch (e) {}
+    const fresh = newArrivals();
+    if (fresh.length && String(fresh[0].createdAt).slice(0, 10) > (store.get('lib.newSeen') || '')) newPromo(fresh, afterNew); else afterNew();
   }
   function votePromo(r, next) {
     const newest = r.candidates.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
