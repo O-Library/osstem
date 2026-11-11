@@ -121,6 +121,18 @@ label.f { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-we
 .together { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
 .together h3 { font-size: 14px; font-weight: 800; margin: 0 0 10px; }
 .newgrid { margin-bottom: 14px; }
+.qrsheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.qrcard { border: 1px solid var(--line); border-radius: 14px; padding: 20px; text-align: center; }
+.qr-where { font-size: 13px; font-weight: 700; color: var(--primary); }
+.qr-title { font-size: 24px; font-weight: 800; margin: 4px 0 12px; }
+.qr-img { width: 220px; max-width: 100%; margin: 0 auto; }
+.qr-img svg { width: 100%; height: auto; display: block; }
+.qr-how { font-size: 14px; margin-top: 10px; }
+.qr-url { margin-top: 6px; word-break: break-all; }
+.scan .cands { margin-top: 12px; }
+.scan .cand2 { grid-template-columns: auto 1fr; }
+@media (max-width: 600px) { .qrsheet { grid-template-columns: 1fr; } }
+@media print { body.printing-qr * { visibility: hidden; } body.printing-qr #qrSheet, body.printing-qr #qrSheet * { visibility: visible; } body.printing-qr #qrSheet { position: absolute; left: 0; top: 0; width: 100%; } body.printing-qr .qrcard { break-inside: avoid; } }
 .tg-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .tg { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: grid; gap: 6px; font: inherit; }
 .tg .cover { aspect-ratio: 2 / 3; }
@@ -548,7 +560,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     if (l.status === 'returned') return '<span class="pill mute">반납완료</span>';
     if (l.status === 'cancelled') return '<span class="pill mute">취소</span>';
     if (l.status === 'lost') return '<span class="pill bad">분실</span>';
-    if (l.waitingPickup) return '<span class="pill info">수령대기</span>';
+    if (l.uncollected) return '<span class="pill bad">장기 미수령</span>';
+    if (l.pickupReady) return '<span class="pill info">수령 가능</span>';
+    if (l.waitingPickup) return '<span class="pill info">준비 중</span>';
     if (l.dday <= 3) return `<span class="pill warn">${l.dday === 0 ? '오늘 반납' : `D-${l.dday}`}</span>`;
     return `<span class="pill ok">대출중 · D-${l.dday}</span>`;
   }
@@ -584,6 +598,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       if (r === 'recommend') return await renderRecommend();
       if (r === 'wish') return await renderWish();
       if (r === 'guide') return renderGuide();
+      if (r === 'scan') return await renderScan(parts[1] === 'return' ? 'return' : 'pickup');
       if (r === 'admin') return await renderAdmin(parts[1] || 'dashboard', parts[2]);
     } catch (e) { view.innerHTML = `<div class="panel">${esc(e.message)}</div>`; return; }
     location.hash = '#/';
@@ -754,16 +769,52 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       <div><div style="font-weight:700">${esc(l.bookTitle)}</div><div class="small muted"><span class="code">${esc(l.bookCode)}</span> · 대출 ${short(l.loanDate)} · 반납예정 <b style="color:var(--ink)">${pretty(l.dueDate)}</b>${(l.extensions || []).length ? ` · 연장 ${l.extensions.length}회` : ''}${l.returnedAt ? ` · 반납 ${short(l.returnedAt)}` : ''}</div><div style="margin-top:6px">${loanPill(l)}</div></div>
       <div class="row">${actions || ''}</div></div>`;
     view.innerHTML = `<div class="row" style="margin-bottom:16px"><h2 style="font-size:22px;font-weight:800">${esc(d.me.name)}님의 대출</h2><span class="muted small">${esc(d.me.team)} · 사번 ${esc(d.me.empNo)}${d.me.emailMasked ? ' · 알림 ' + esc(d.me.emailMasked) : ''}</span><span class="spacer"></span><button class="btn sm ghost" id="switch">다른 사번으로 조회</button></div>
-      <div class="panel"><h2>대출 중 ${d.active.length}권</h2>${d.active.length ? d.active.map((l) => row(l, l.status === 'active' ? `<button class="btn sm" data-ext="${l.id}">${state.config.extendDays}일 연장</button><button class="btn sm primary" data-ret="${l.id}">반납했어요</button>` : '<span class="small muted">담당자가 확인하면 반납 완료됩니다</span>')).join('') : '<p class="muted">대출 중인 책이 없습니다. <a href="#/">읽을 책 찾아보기</a></p>'}</div>
+      <div class="panel"><h2>대출 중 ${d.active.length}권</h2>${d.active.length ? d.active.map((l) => row(l, l.status !== 'active' ? '<span class="small muted">담당자가 확인하면 반납 완료됩니다</span>' : l.waitingPickup ? `<button class="btn sm primary" data-pick="${l.id}">수령했어요</button>` : `<button class="btn sm" data-ext="${l.id}">${state.config.extendDays}일 연장</button><button class="btn sm primary" data-ret="${l.id}">반납했어요</button>`)).join('') : '<p class="muted">대출 중인 책이 없습니다. <a href="#/">읽을 책 찾아보기</a></p>'}</div>
       ${d.reservations.length ? `<div class="panel"><h2>예약 ${d.reservations.length}건</h2>${d.reservations.map((r) => `<div class="loanrow">${coverHTML({ title: r.title, catCode: r.catCode, cover: r.cover, isbn: r.isbn })}<div><div style="font-weight:700">${esc(r.title)}</div><div class="small muted">${r.availableNow ? '<b style="color:var(--ok)">지금 대출 신청할 수 있습니다</b>' : `대기 ${r.rank}번째`}</div></div><div class="row">${r.availableNow ? `<button class="btn sm primary" data-open="${esc(r.key)}">대출 신청</button>` : ''}<button class="btn sm danger" data-cancel="${r.id}">예약 취소</button></div></div>`).join('')}</div>` : ''}
       <div class="panel"><h2>지난 대출</h2>${d.history.length ? d.history.map((l) => row(l)).join('') : '<p class="muted">기록이 없습니다.</p>'}</div>
-      <p class="small muted" style="margin-top:16px">반납: 반납도서 칸에 책을 넣은 뒤 [반납했어요]를 눌러주세요. 연장은 ${state.config.maxExtensions}회 ${state.config.extendDays}일까지이며, 연체 중이거나 예약자가 있으면 연장할 수 없습니다.</p>`;
+      <p class="small muted" style="margin-top:16px">수령: 대출도서 칸에서 책을 가져간 뒤 [수령했어요]를 눌러 주세요. 반납: 반납도서 칸에 책을 넣은 뒤 [반납했어요]를 눌러 주세요. 서고에 붙은 QR 코드를 휴대폰으로 찍어도 됩니다. 연장은 ${state.config.maxExtensions}회 ${state.config.extendDays}일까지이며, 연체 중이거나 예약자가 있으면 연장할 수 없습니다.</p>`;
     $('#switch').onclick = () => { state.empNo = ''; store.set('lib.emp', null); state.myData = null; renderAlerts(); renderIdentify(); };
     $$('[data-ret]').forEach((b) => b.onclick = async () => { if (!confirm('반납도서 칸에 책을 넣으셨나요?')) return; try { await api('returnBook', b.dataset.ret, state.empNo); toast('반납 등록했습니다. 담당자 확인 후 반납 완료됩니다.'); state.cat = null; renderMe(); } catch (e) { toast(e.message, true); } });
+    $$('[data-pick]').forEach((b) => b.onclick = async () => { try { await api('pickup', [b.dataset.pick], state.empNo); toast('수령 완료로 기록했어요. 즐거운 독서 되세요.'); renderMe(); } catch (e) { toast(e.message, true); } });
     $$('[data-ext]').forEach((b) => b.onclick = async () => { try { const r = await api('extend', b.dataset.ext, state.empNo); toast(r.autoApproved ? `연장되었습니다. 새 반납예정일 ${pretty(r.dueDate)}` : '연장 신청했습니다. 담당자 승인 후 메일로 알려드립니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
     $$('[data-cancel]').forEach((b) => b.onclick = async () => { try { await api('cancelReservation', b.dataset.cancel, state.empNo); toast('예약을 취소했습니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
     $$('[data-open]').forEach((b) => b.onclick = async () => { await loadCatalog(); openBook(b.dataset.open); });
   }
+  // ─── 서고 QR: 휴대폰으로 찍으면 수령/반납 등록 ─────
+  async function renderScan(kind) {
+    const P = kind === 'pickup';
+    if (!state.empNo) {
+      let who = null;
+      const ef = empField('scEmp', (w) => { who = w; $('#scGo').disabled = !w; });
+      view.innerHTML = `<div class="panel idbox"><h2>${P ? '책 가져가기' : '책 반납하기'}</h2><p class="muted small" style="margin-top:-6px">사번을 한 번 입력하면 이 휴대폰에서는 다음부터 바로 열려요.</p>${ef.html}<button class="btn primary lg" id="scGo" style="width:100%;margin-top:14px" disabled>다음</button></div>`;
+      ef.bind(view);
+      $('#scGo').onclick = () => { if (!who) return; state.empNo = who.empNo; store.set('lib.emp', who.empNo); renderScan(kind); };
+      return;
+    }
+    view.innerHTML = '<div class="empty">불러오는 중…</div>';
+    await refreshMe();
+    const d = state.myData;
+    if (!d) { state.empNo = ''; store.set('lib.emp', null); return renderScan(kind); }
+    const list = d.active.filter((l) => l.status === 'active' && (P ? l.waitingPickup : !l.waitingPickup));
+    view.innerHTML = `<div class="panel idbox scan"><div class="small muted">${esc(d.me.name)}님 · ${esc(d.me.team)} <a href="#" id="scSwitch" class="small">다른 사번</a></div>
+      <h2 style="margin-top:6px">${P ? '가져가는 책을 골라 주세요' : '반납하는 책을 골라 주세요'}</h2>
+      ${list.length ? `<div class="cands">${list.map((l) => `<label class="cand2"><input type="checkbox" value="${esc(l.id)}" checked><div><b>${esc(l.bookTitle)}</b><div class="small muted"><span class="code">${esc(l.bookCode)}</span>${P ? '' : ` · 반납예정 ${pretty(l.dueDate)}`}</div></div></label>`).join('')}</div>
+        <button class="btn primary lg" id="scDo" style="width:100%;margin-top:14px">${P ? '가져갔어요' : '반납도서 칸에 넣었어요'}</button>`
+      : `<p class="muted">${P ? '지금 가져갈 책이 없어요. 대출 신청한 책은 다음 영업일 14시부터 대출도서 칸에 놓여요.' : '반납할 책이 없어요.'}</p><a class="btn" href="#/me" style="width:100%">내 대출 보기</a>`}</div>`;
+    $('#scSwitch').onclick = (e) => { e.preventDefault(); state.empNo = ''; store.set('lib.emp', null); state.myData = null; renderScan(kind); };
+    if (!list.length) return;
+    $('#scDo').onclick = async () => {
+      const ids = $$('.cands input:checked', view).map((x) => x.value);
+      if (!ids.length) return toast('책을 골라 주세요.', true);
+      $('#scDo').disabled = true;
+      try {
+        await api(P ? 'pickup' : 'returnBooks', ids, state.empNo);
+        state.cat = null;
+        view.innerHTML = `<div class="panel idbox scan" style="text-align:center"><div class="big" style="font-size:40px">✓</div><h2>${P ? `${ids.length}권 수령 완료` : `${ids.length}권 반납 등록`}</h2><p class="muted">${P ? `반납예정일은 내 대출에서 볼 수 있어요.` : '담당자가 확인하면 반납 완료돼요.'}</p><a class="btn" href="#/me" style="width:100%">내 대출 보기</a></div>`;
+      } catch (e) { toast(e.message, true); $('#scDo').disabled = false; }
+    };
+  }
+
   function renderIdentify(msg) {
     let who = null;
     const ef = empField('meEmp', (w) => { who = w; $('#meGo').disabled = !w; });
@@ -1025,13 +1076,13 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   }
 
   // ═══ 관리자 ═══════════════════════════════════════
-  const TABS = [['dashboard', '대시보드'], ['register', '도서 등록'], ['loans', '대출 관리'], ['wish', '희망도서·투표'], ['insights', '구매 인사이트'], ['books', '장서 관리'], ['mail', '메일 발송'], ['data', '사원명부·데이터'], ['categories', '분류 관리'], ['settings', '설정']];
+  const TABS = [['dashboard', '대시보드'], ['register', '도서 등록'], ['loans', '대출 관리'], ['wish', '희망도서·투표'], ['insights', '구매 인사이트'], ['books', '장서 관리'], ['mail', '메일 발송'], ['data', '사원명부·데이터'], ['categories', '분류 관리'], ['qr', '서고 QR'], ['settings', '설정']];
   async function renderAdmin(tab, sub) {
     if (!state.token) return renderLogin(tab);
     view.innerHTML = `<div class="admin"><nav class="side" aria-label="관리 메뉴">${TABS.map(([k, n]) => `<a href="#/admin/${k}" class="${k === tab ? 'on' : ''}">${n}${k === 'loans' && state.overdue ? `<span class="badge">${state.overdue}</span>` : ''}</a>`).join('')}<a href="#" id="logout" style="margin-top:12px;color:var(--ink-3)">로그아웃</a></nav><section id="pane"><div class="empty">불러오는 중…</div></section></div>`;
     $('#logout').onclick = (e) => { e.preventDefault(); state.token = ''; sstore.set('lib.adm', null); location.hash = '#/admin'; router(); };
     const pane = $('#pane');
-    const fn = { dashboard: aDashboard, register: aRegister, loans: aLoans, wish: aWish, insights: aInsights, books: aBooks, mail: aMail, data: aData, categories: aCategories, settings: aSettings }[tab] || aDashboard;
+    const fn = { dashboard: aDashboard, register: aRegister, loans: aLoans, wish: aWish, insights: aInsights, books: aBooks, mail: aMail, data: aData, categories: aCategories, qr: aQr, settings: aSettings }[tab] || aDashboard;
     try { await fn(pane, sub); } catch (e) { if (e.auth) return renderLogin(tab); pane.innerHTML = `<div class="panel">${esc(e.message)}</div>`; }
     if (state.initialPw) pane.insertAdjacentHTML('afterbegin', '<div class="alert warn" style="margin-bottom:16px"><span>초기 관리자 비밀번호를 사용 중입니다. 설정에서 바꿔주세요.</span><a class="act" href="#/admin/settings">비밀번호 변경</a></div>');
   }
@@ -1042,6 +1093,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
 
   const loanTable = (rows, extra) => rows.length ? `<div class="tw"><table class="t"><tr><th>성명</th><th>도서</th><th>반납예정</th><th></th></tr>${rows.map((l) => `<tr><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td>${short(l.dueDate)}<div>${loanPill(l)}</div></td><td style="text-align:right;white-space:nowrap">${extra(l)}</td></tr>`).join('')}</table></div>` : '<p class="muted small">없음</p>';
   function bindLoanActions(root, reload) {
+    $$('[data-pickup]', root).forEach((b) => b.onclick = async () => { try { await api('markPickup', [b.dataset.pickup]); toast('수령 완료로 기록했습니다.'); reload(); } catch (e) { toast(e.message, true); } });
     $$('[data-ret]', root).forEach((b) => b.onclick = async () => { try { await api('confirmReturn', [b.dataset.ret]); toast('반납 처리했습니다.'); state.cat = null; reload(); } catch (e) { toast(e.message, true); } });
     $$('[data-ext]', root).forEach((b) => b.onclick = async () => { try { const l = await api('extendLoan', b.dataset.ext, true); toast(`연장했습니다. 새 반납예정일 ${pretty(l.dueDate)}`); reload(); } catch (e) { toast(e.message, true); } });
     $$('[data-rej]', root).forEach((b) => b.onclick = async () => { try { await api('extendLoan', b.dataset.rej, false); toast('연장을 거절하고 안내 메일을 보냈습니다.'); reload(); } catch (e) { toast(e.message, true); } });
@@ -1056,7 +1108,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
       <div class="mailstate" style="background:${mailOk ? 'var(--ok-soft)' : 'var(--warn-soft)'}"><span>${mailOk ? `자동 메일 사용 중 — 영업일 매일 ${d.mail.sendHour}시에 반납예정·연체 안내를 보냅니다.` : '자동 메일이 꺼져 있습니다.'}${d.mail.lastRun ? ` <span class="muted small">마지막 실행 ${esc(d.mail.lastRun.replace('T', ' ').slice(0, 16))}</span>` : ''}${d.mail.quota != null ? ` <span class="muted small">· 오늘 남은 발송량 ${d.mail.quota}통</span>` : ''}</span><span class="spacer"></span><a class="btn sm" href="#/admin/mail">발송 관리</a></div>
       <div class="stats">
         <div class="stat bad"><b>${c.overdue}</b><span>연체</span></div><div class="stat warn"><b>${c.dueSoon}</b><span>3일 내 반납예정</span></div>
-        <div class="stat info"><b>${c.returning}</b><span>반납 확인 대기</span></div><div class="stat"><b>${c.open}</b><span>대출 중</span></div>
+        <div class="stat info"><b>${c.pickupWaiting || 0}</b><span>수령 대기${c.uncollected ? ` · 장기 미수령 ${c.uncollected}` : ''}</span></div><div class="stat info"><b>${c.returning}</b><span>반납 확인 대기</span></div><div class="stat"><b>${c.open}</b><span>대출 중</span></div>
         <div class="stat"><b>${c.thisMonth}</b><span>이번 달 대출</span></div><div class="stat"><b>${c.titles.toLocaleString()}</b><span>보유 도서 종수 (${c.books.toLocaleString()}권)</span></div></div>
       ${!c.employees ? '<div class="alert danger" style="margin-bottom:16px"><span>사원명부가 비어 있어 사번 조회·신청이 되지 않습니다.</span><a class="act" href="#/admin/data">사원명부 넣기</a></div>' : ''}
       ${c.noEmail ? `<div class="alert warn" style="margin-bottom:16px"><span>사번·이메일이 연결되지 않은 대출 ${c.noEmail}건은 자동 메일을 받을 수 없습니다.</span><a class="act" href="#/admin/loans/noemp">연결하기</a></div>` : ''}
@@ -1160,7 +1212,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   }
 
   async function aLoans(pane, sub = 'open') {
-    const tabs = [['open', '진행 중'], ['overdue', '연체'], ['returning', '반납확인 대기'], ['noemp', '알림 불가'], ['returned', '반납 완료'], ['all', '전체']];
+    const tabs = [['open', '진행 중'], ['pickup', '수령 대기'], ['overdue', '연체'], ['returning', '반납확인 대기'], ['noemp', '알림 불가'], ['returned', '반납 완료'], ['all', '전체']];
     pane.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:12px"><div class="seg">${tabs.map(([k, n]) => `<button data-s="${k}" class="${k === sub ? 'on' : ''}">${n}</button>`).join('')}</div><span class="spacer"></span><input class="in" id="lq" placeholder="이름, 팀, 사번, 도서" style="max-width:200px"><button class="btn" id="newLoan">직접 대출 등록</button></div><div id="ltable"></div></div>`;
     $$('.seg button', pane).forEach((b) => b.onclick = () => { location.hash = '#/admin/loans/' + b.dataset.s; });
     const load = async () => {
@@ -1169,7 +1221,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         <td class="code">${l.no || ''}</td><td>${esc(l.bookTitle)}<div class="small code">${esc(l.bookCode)}</div></td><td><b>${esc(l.name)}</b><div class="small muted">${teamCell(l)}</div></td>
         <td>${l.empNo ? `<span class="code">${esc(l.empNo)}</span><div class="small muted">${esc(l.mail || '메일 없음')}</div>` : `<form class="row" data-emp="${l.id}"><input class="in" style="width:110px;padding:5px 8px;font-size:13px" placeholder="사번" required><button class="btn sm">연결</button></form>`}</td>
         <td class="small">${short(l.loanDate)}</td><td class="small">${short(l.dueDate)}${(l.extensions || []).length ? ' <span class="muted">(연장)</span>' : ''}</td><td>${loanPill(l)}${l.memo ? `<div class="small muted">${esc(l.memo)}</div>` : ''}</td>
-        <td style="text-align:right;white-space:nowrap">${['active', 'returning'].includes(l.status) ? `<button class="btn sm" data-ret="${l.id}">반납</button> <button class="btn sm" data-ext="${l.id}">연장</button> <button class="btn sm ghost" data-more="${l.id}" aria-label="더보기">⋯</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="muted">해당하는 대출이 없습니다.</p>';
+        <td style="text-align:right;white-space:nowrap">${l.waitingPickup ? `<button class="btn sm" data-pickup="${l.id}">수령 처리</button> ` : ''}${['active', 'returning'].includes(l.status) ? `<button class="btn sm" data-ret="${l.id}">반납</button> <button class="btn sm" data-ext="${l.id}">연장</button> <button class="btn sm ghost" data-more="${l.id}" aria-label="더보기">⋯</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="muted">해당하는 대출이 없습니다.</p>';
       bindLoanActions(pane, load);
       $$('[data-emp]', pane).forEach((f) => f.onsubmit = async (e) => { e.preventDefault(); try { await api('updateLoan', f.dataset.emp, { empNo: $('input', f).value }); toast('사번을 연결했습니다.'); load(); } catch (err) { toast(err.message, true); } });
       $$('[data-more]', pane).forEach((b) => b.onclick = () => {
@@ -1356,6 +1408,24 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         ${d.wish.length ? `<div class="tw"><table class="t"><tr><th>순위</th><th>도서</th><th>상태</th><th>득표</th><th>관련 검색</th></tr>${d.wish.map((w, i) => `<tr><td><b>${i + 1}</b></td><td>${esc(w.title)}<div class="small muted">${esc(w.author || '')}</div></td><td>${reqPill(w.status)}</td><td>${w.votes}</td><td>${w.demand}</td></tr>`).join('')}</table></div>` : '<p class="muted">진행 중인 희망도서가 없습니다.</p>'}</div>
       <div class="cols2" style="margin-top:16px"><div class="panel"><h2>직무 그룹별 추천 이용</h2>${bars(d.jobs)}</div><div class="panel"><h2>많이 고른 고민</h2>${bars(d.situations)}</div></div>`;
     $$('[data-d]', pane).forEach((b) => b.onclick = () => { location.hash = '#/admin/insights/' + b.dataset.d; });
+  }
+
+  // 서고에 붙일 QR 두 장: 찍으면 사용자 화면의 수령/반납 페이지가 열림
+  function loadQrLib() {
+    if (window.qrcode) return Promise.resolve();
+    return new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'https:\/\/cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; sc.onload = ok; sc.onerror = () => no(new Error('QR 그리기 도구를 불러오지 못했습니다.')); document.head.appendChild(sc); });
+  }
+  async function aQr(pane) {
+    const base = new URL(window.USER_URL || './', location.href).href.split('#')[0];
+    const cards = [['pickup', '책 가져가기', '대출도서 칸', '신청한 책을 가져가면서 찍어 주세요'], ['return', '책 반납하기', '반납도서 칸', '책을 넣은 뒤 찍어 주세요']];
+    pane.innerHTML = `<div class="panel"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">서고 QR</h2><span class="spacer"></span><button class="btn primary" id="qrPrint">인쇄</button></div>
+      <p class="small muted" style="margin:0 0 16px">대출도서 칸과 반납도서 칸에 한 장씩 붙여 두세요. 휴대폰 카메라로 찍으면 사번 확인 후 바로 수령·반납이 기록돼, 서고에 가 보지 않아도 누가 언제 가져가고 돌려놨는지 알 수 있어요.</p>
+      <div class="qrsheet" id="qrSheet">${cards.map(([k, t, where, how]) => `<div class="qrcard"><div class="qr-where">${where}</div><div class="qr-title">${t}</div><div class="qr-img" data-qr="${base}#/scan/${k}"><div class="empty small">QR 만드는 중…</div></div><div class="qr-how">${how}</div><div class="qr-url small muted">${esc(base)}#/scan/${k}</div></div>`).join('')}</div></div>`;
+    try {
+      await loadQrLib();
+      $$('[data-qr]', pane).forEach((el) => { const q = qrcode(0, 'M'); q.addData(el.dataset.qr); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); });
+    } catch (e) { $$('[data-qr]', pane).forEach((el) => { el.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }); }
+    $('#qrPrint', pane).onclick = () => { document.body.classList.add('printing-qr'); window.print(); setTimeout(() => document.body.classList.remove('printing-qr'), 500); };
   }
 
   async function aSettings(pane) {

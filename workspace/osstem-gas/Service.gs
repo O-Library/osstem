@@ -26,7 +26,12 @@ function loanView_(l) {
   v.dday = l.dueDate ? diffDays_(l.dueDate, t) : null;
   v.overdue = l.status === 'active' && v.dday !== null && v.dday < 0;
   v.overdueDays = v.overdue ? -v.dday : 0;
-  v.waitingPickup = l.status === 'active' && !!l.pickupDate && t < l.pickupDate;
+  // 수령: 시트에서 옮겨 온 대출은 이미 가져간 것으로 봄. 사이트 신청은 [수령했어요]·서고 QR·담당자 처리로 확인
+  var picked = !!l.pickedUpAt || l.createdBy === 'sheet' || !l.pickupDate;
+  v.waitingPickup = l.status === 'active' && !picked;
+  v.pickupReady = v.waitingPickup && t >= l.pickupDate;
+  v.uncollected = v.pickupReady && diffDays_(t, l.pickupDate) >= (Number(settings_().pickupHoldDays) || 5);
+  if (v.waitingPickup) { v.overdue = false; v.overdueDays = 0; }
   // 소속·이름은 사원명부(현재 기준)를 우선 표시. 대출 당시 소속은 teamAtLoan으로 보존
   var e = l.empNo && empMap_()[normEmp_(l.empNo)];
   if (e) {
@@ -34,7 +39,7 @@ function loanView_(l) {
     if (nn) v.name = nn;
     if (tn && tn !== String(l.team || '').trim()) { v.teamAtLoan = l.team; v.team = tn; }
   }
-  v.statusLabel = { active: v.overdue ? '연체 ' + v.overdueDays + '일' : v.waitingPickup ? '수령대기' : '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실' }[l.status] || l.status;
+  v.statusLabel = { active: v.overdue ? '연체 ' + v.overdueDays + '일' : v.uncollected ? '장기 미수령' : v.pickupReady ? '수령 가능' : v.waitingPickup ? '준비 중' : '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실' }[l.status] || l.status;
   return v;
 }
 function openByCode_() { var m = {}; rows_('loans').forEach(function (l) { if (OPEN.indexOf(l.status) >= 0) m[l.bookCode] = l; }); return m; }
@@ -202,7 +207,8 @@ function myPage_(empNo) {
   active.forEach(function (l) {
     if (l.overdue) alerts.push({ level: 'danger', text: '「' + l.bookTitle + '」 반납예정일(' + pretty_(l.dueDate) + ')이 ' + l.overdueDays + '일 지났습니다. 빠른 반납 부탁드립니다.' });
     else if (l.status === 'active' && l.dday <= 3) alerts.push({ level: 'warn', text: '「' + l.bookTitle + '」 반납예정일이 ' + (l.dday === 0 ? '오늘' : l.dday + '일 후') + '(' + pretty_(l.dueDate) + ')입니다.' });
-    if (l.waitingPickup) alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 ' + pretty_(l.pickupDate) + ' 14:00 이후 대출도서 칸에서 수령하세요.' });
+    if (l.waitingPickup && !l.pickupReady) alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 ' + pretty_(l.pickupDate) + ' 14:00 이후 대출도서 칸에서 수령하세요.' });
+    else if (l.pickupReady) alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 대출도서 칸에 준비돼 있어요. 가져가신 뒤 [수령했어요]를 눌러 주세요.' });
     if (l.extensionRequest && l.extensionRequest.status === 'pending') alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 연장 신청이 담당자 승인 대기 중입니다.' });
   });
   myRes.forEach(function (r) { if (r.availableNow) alerts.push({ level: 'success', text: '예약하신 「' + r.title + '」을(를) 지금 대출 신청할 수 있습니다.', key: r.key }); });
@@ -216,9 +222,28 @@ function ownLoan_(loanId, empNo) {
   return l;
 }
 
+// 수령 확인: 이용자 본인([수령했어요]·서고 QR) 또는 담당자
+function confirmPickup_(ids, empNo) {
+  var done = [];
+  [].concat(ids).forEach(function (id) {
+    var l = ownLoan_(id, empNo);
+    if (l.status !== 'active' || !loanView_(l).waitingPickup) return;
+    l.pickedUpAt = nowIso_(); done.push(l);
+  });
+  save_('loans', done);
+  return { count: done.length };
+}
+function adminPickup_(ids) {
+  var done = rows_('loans').filter(function (l) { return ids.indexOf(l.id) >= 0 && l.status === 'active' && !l.pickedUpAt; });
+  done.forEach(function (l) { l.pickedUpAt = nowIso_(); });
+  save_('loans', done);
+  return { count: done.length };
+}
+
 function requestReturn_(loanId, empNo) {
   var l = ownLoan_(loanId, empNo);
   if (l.status !== 'active') throw new AppError('반납 등록할 수 없는 상태입니다.');
+  if (!l.pickedUpAt) l.pickedUpAt = nowIso_();
   l.status = 'returning';
   l.returnRequestedAt = nowIso_();
   save_('loans', l);
@@ -337,6 +362,7 @@ function adminLoans_(status, q) {
   var list = rows_('loans').map(loanView_);
   if (status === 'open') list = list.filter(function (l) { return OPEN.indexOf(l.status) >= 0; });
   else if (status === 'overdue') list = list.filter(function (l) { return l.overdue; });
+  else if (status === 'pickup') list = list.filter(function (l) { return l.waitingPickup; }).sort(function (a, b) { return (b.uncollected ? 1 : 0) - (a.uncollected ? 1 : 0); });
   else if (status === 'noemp') list = list.filter(function (l) { return OPEN.indexOf(l.status) >= 0 && !emailOf_(l); });
   else if (status !== 'all') list = list.filter(function (l) { return l.status === status; });
   if (q) { q = String(q).toLowerCase(); list = list.filter(function (l) { return [l.bookCode, l.bookTitle, l.name, l.team, l.empNo].join(' ').toLowerCase().indexOf(q) >= 0; }); }
@@ -362,6 +388,7 @@ function dashboard_() {
       books: books.length, titles: Object.keys(titles).length, open: open.filter(function (l) { return l.status === 'active'; }).length,
       overdue: open.filter(function (l) { return l.overdue; }).length, dueSoon: dueSoon.length,
       returning: open.filter(function (l) { return l.status === 'returning'; }).length,
+      pickupWaiting: open.filter(function (l) { return l.waitingPickup; }).length, uncollected: open.filter(function (l) { return l.uncollected; }).length,
       extensionPending: open.filter(function (l) { return l.extensionRequest && l.extensionRequest.status === 'pending'; }).length,
       noEmail: open.filter(function (l) { return !l.mail; }).length,
       thisMonth: loans.filter(function (l) { return String(l.loanDate).slice(0, 7) === t.slice(0, 7) && l.status !== 'cancelled'; }).length,

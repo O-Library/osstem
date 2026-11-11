@@ -8,7 +8,7 @@ var TABLES = {
     ['status', '상태'], ['loanCount', '대출횟수'], ['createdAt', '등록일'], ['coverCheckedAt', '표지확인일']] },
   loans: { sheet: '대출', cols: [
     ['id', 'ID'], ['no', '번호'], ['bookCode', '도서코드'], ['titleKey', '책키'], ['bookTitle', '도서명'], ['empNo', '사번'], ['name', '성명'],
-    ['team', '소속'], ['email', '이메일'], ['appliedAt', '신청일시'], ['loanDate', '대출일'], ['pickupDate', '수령일'], ['dueDate', '반납예정일'],
+    ['team', '소속'], ['email', '이메일'], ['appliedAt', '신청일시'], ['loanDate', '대출일'], ['pickupDate', '수령일'], ['pickedUpAt', '수령확인일시'], ['dueDate', '반납예정일'],
     ['status', '상태'], ['returnRequestedAt', '반납신청일시'], ['returnedAt', '반납확인일'], ['returnedBy', '반납확인자'],
     ['extensions', '연장이력'], ['extensionRequest', '연장신청'], ['memo', '메모'], ['createdBy', '등록경로']] },
   reservations: { sheet: '예약', cols: [
@@ -81,6 +81,13 @@ function table_(name) {
   var values = sh.getDataRange().getValues();
   var header = values[0] || [];
   var idx = def.cols.map(function (c) { return header.indexOf(c[1]); });
+  // 새 버전에서 늘어난 칸은 기존 탭 오른쪽 끝에 머리글을 붙여 둠
+  var miss = def.cols.filter(function (c, i) { return idx[i] < 0; });
+  if (miss.length && header.length) {
+    header = header.concat(miss.map(function (c) { return c[1]; }));
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    idx = def.cols.map(function (c) { return header.indexOf(c[1]); });
+  }
   var rows = [];
   for (var r = 1; r < values.length; r++) {
     var row = values[r];
@@ -143,7 +150,7 @@ var DEFAULT_SETTINGS = {
   managerName: '인재개발팀 장유영 사원',
   managerPhone: '070-8644-7372',
   managerEmail: 'yuyoung2@osstem.com',
-  loanDays: 21, extendDays: 7, maxExtensions: 1, maxLoansPerUser: 5,
+  loanDays: 21, pickupHoldDays: 5, extendDays: 7, maxExtensions: 1, maxLoansPerUser: 5,
   blockWhenOverdue: true, autoApproveExtension: true, autoConfirmReturn: false, newBookDays: 60,
   mail: { enabled: true, sendHour: 9, dueSoonDays: [3, 0], overdueRepeatDays: 3, adminDigest: true, ccAdminOnOverdue: false },
   holidays: [
