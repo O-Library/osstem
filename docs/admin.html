@@ -124,6 +124,8 @@ label.f { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-we
 .together { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; }
 .together h3 { font-size: 14px; font-weight: 800; margin: 0 0 10px; }
 .newgrid { margin-bottom: 14px; }
+.reviews .rv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.reviews .rv:first-child { border-top: 0; }
 .qrsheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .qrcard { border: 1px solid var(--line); border-radius: 14px; padding: 20px; text-align: center; }
 .qr-where { font-size: 13px; font-weight: 700; color: var(--primary); }
@@ -469,9 +471,9 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
   <div class="alerts" id="alerts"></div>
   <main id="view"></main>
   <script>window.addEventListener('error', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + (e.message || e) + '</div>'; }); window.addEventListener('unhandledrejection', function (e) { var v = document.getElementById('view'); if (v) v.innerHTML = '<div class="panel">화면 오류: ' + ((e.reason && e.reason.message) || e.reason) + '</div>'; });</script>
-  <script src="config.js?v=mwbpbg4c"></script>
+  <script src="config.js?v=mwbpf4jd"></script>
   <script>window.APP_MODE = 'admin';</script>
-  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mwbpbg4c"><\/script>');</script>
+  <script>if (window.API_MODE === 'demo') document.write('<script src="demo.js?v=mwbpf4jd"><\/script>');</script>
   <script>var BOOT = {};</script>
   <script>
 (() => {
@@ -729,7 +731,7 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         ${b.pubDate ? `<dt>출간</dt><dd>${esc(String(b.pubDate).slice(0, 10))}</dd>` : ''}${b.isbn ? `<dt>ISBN</dt><dd>${esc(b.isbn)}</dd>` : ''}<dt>누적 대출</dt><dd>${b.loanCount}회</dd></dl>
       ${b.description ? `<div class="desc">${esc(b.description)}</div>` : ''}
       <div class="row"><a class="btn sm" href="${esc(b.links.kyobo)}" target="_blank" rel="noopener">교보문고에서 보기</a><a class="btn sm" href="${esc(b.links.nl)}" target="_blank" rel="noopener">국립중앙도서관</a></div>
-      </div></div><div class="apply" id="apply"></div>${(b.together || []).length ? `<div class="together"><h3>이 책을 빌린 분들이 함께 빌린 책</h3><div class="tg-row">${b.together.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''}${(() => { const rel = relatedBooks(key, (b.together || []).map((t) => t.key)); return rel.length ? `<div class="together"><h3>비슷한 분야의 책 <span class="small muted" style="font-weight:500">${esc(b.catName || '')}</span></h3><div class="tg-row">${rel.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''; })()}`;
+      </div></div><div class="apply" id="apply"></div>${(b.reviews || []).length ? `<div class="together"><h3>읽은 분들의 한 줄 후기 <span class="small muted" style="font-weight:500">${b.reviews.length}개</span></h3><div class="reviews">${b.reviews.slice(0, 5).map((r) => `<div class="rv"><span>“${esc(r.text)}”</span><span class="small muted">${short(r.at)}</span></div>`).join('')}</div></div>` : ''}${(b.together || []).length ? `<div class="together"><h3>이 책을 빌린 분들이 함께 빌린 책</h3><div class="tg-row">${b.together.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''}${(() => { const rel = relatedBooks(key, (b.together || []).map((t) => t.key)); return rel.length ? `<div class="together"><h3>비슷한 분야의 책 <span class="small muted" style="font-weight:500">${esc(b.catName || '')}</span></h3><div class="tg-row">${rel.map((t) => `<button class="tg" data-tg="${esc(t.key)}" aria-label="${esc(t.title)} 상세보기">${coverHTML(t, '', true)}<span class="t">${esc(t.title)}</span></button>`).join('')}</div></div>` : ''; })()}`;
     $$('[data-tg]', body).forEach((x) => x.onclick = () => openBook(x.dataset.tg));
     const ap = $('#apply', body);
     if (mine) { ap.innerHTML = `<p>대출 중인 책입니다. 반납예정일은 <b>${pretty(mine.dueDate)}</b>입니다. <a href="#/me">내 대출 보기</a></p>`; return; }
@@ -771,16 +773,23 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
     await refreshMe();
     const d = state.myData;
     if (!d) { state.empNo = ''; store.set('lib.emp', null); return renderIdentify('사번을 다시 확인해 주세요.'); }
+    const myRv = d.myReviews || {};
+    const rvBtn = (l) => `<button class="btn sm ghost" data-rv="${esc(l.titleKey)}" data-rt="${esc(l.bookTitle)}">${myRv[l.titleKey] ? '후기 고치기' : '한 줄 후기'}</button>`;
     const row = (l, actions) => `<div class="loanrow">${coverHTML({ title: l.bookTitle, catCode: String(l.bookCode).split('-')[0], cover: l.cover, isbn: l.isbn })}
       <div><div style="font-weight:700">${esc(l.bookTitle)}</div><div class="small muted"><span class="code">${esc(l.bookCode)}</span> · 대출 ${short(l.loanDate)} · 반납예정 <b style="color:var(--ink)">${pretty(l.dueDate)}</b>${(l.extensions || []).length ? ` · 연장 ${l.extensions.length}회` : ''}${l.returnedAt ? ` · 반납 ${short(l.returnedAt)}` : ''}</div><div style="margin-top:6px">${loanPill(l)}</div></div>
       <div class="row">${actions || ''}</div></div>`;
     view.innerHTML = `<div class="row" style="margin-bottom:16px"><h2 style="font-size:22px;font-weight:800">${esc(d.me.name)}님의 대출</h2><span class="muted small">${esc(d.me.team)} · 사번 ${esc(d.me.empNo)}${d.me.emailMasked ? ' · 알림 ' + esc(d.me.emailMasked) : ''}</span><span class="spacer"></span><button class="btn sm ghost" id="switch">다른 사번으로 조회</button></div>
-      <div class="panel"><h2>대출 중 ${d.active.length}권</h2>${d.active.length ? d.active.map((l) => row(l, l.status !== 'active' ? '<span class="small muted">담당자가 확인하면 반납 완료됩니다</span>' : l.waitingPickup ? `<button class="btn sm primary" data-pick="${l.id}">수령했어요</button>` : `<button class="btn sm" data-ext="${l.id}">${state.config.extendDays}일 연장</button><button class="btn sm primary" data-ret="${l.id}">반납했어요</button>`)).join('') : '<p class="muted">대출 중인 책이 없습니다. <a href="#/">읽을 책 찾아보기</a></p>'}</div>
+      <div class="panel"><h2>대출 중 ${d.active.length}권</h2>${d.active.length ? d.active.map((l) => row(l, l.status !== 'active' ? '<span class="small muted">담당자가 확인하면 반납 완료됩니다</span>' + rvBtn(l) : l.waitingPickup ? `<button class="btn sm primary" data-pick="${l.id}">수령했어요</button>` : `${rvBtn(l)}<button class="btn sm" data-ext="${l.id}">${state.config.extendDays}일 연장</button><button class="btn sm primary" data-ret="${l.id}">반납했어요</button>`)).join('') : '<p class="muted">대출 중인 책이 없습니다. <a href="#/">읽을 책 찾아보기</a></p>'}</div>
       ${d.reservations.length ? `<div class="panel"><h2>예약 ${d.reservations.length}건</h2>${d.reservations.map((r) => `<div class="loanrow">${coverHTML({ title: r.title, catCode: r.catCode, cover: r.cover, isbn: r.isbn })}<div><div style="font-weight:700">${esc(r.title)}</div><div class="small muted">${r.availableNow ? '<b style="color:var(--ok)">지금 대출 신청할 수 있습니다</b>' : `대기 ${r.rank}번째`}</div></div><div class="row">${r.availableNow ? `<button class="btn sm primary" data-open="${esc(r.key)}">대출 신청</button>` : ''}<button class="btn sm danger" data-cancel="${r.id}">예약 취소</button></div></div>`).join('')}</div>` : ''}
-      <div class="panel"><h2>지난 대출</h2>${d.history.length ? d.history.map((l) => row(l)).join('') : '<p class="muted">기록이 없습니다.</p>'}</div>
+      <div class="panel"><h2>지난 대출</h2>${d.history.length ? d.history.map((l) => row(l, l.status === 'returned' ? rvBtn(l) : '')).join('') : '<p class="muted">기록이 없습니다.</p>'}</div>
       <p class="small muted" style="margin-top:16px">수령: 대출도서 칸에서 책을 가져간 뒤 [수령했어요]를 눌러 주세요. 반납: 반납도서 칸에 책을 넣은 뒤 [반납했어요]를 눌러 주세요. 서고에 붙은 QR 코드를 휴대폰으로 찍어도 됩니다. 연장은 ${state.config.maxExtensions}회 ${state.config.extendDays}일까지이며, 연체 중이거나 예약자가 있으면 연장할 수 없습니다.</p>`;
     $('#switch').onclick = () => { state.empNo = ''; store.set('lib.emp', null); state.myData = null; renderAlerts(); renderIdentify(); };
     $$('[data-ret]').forEach((b) => b.onclick = async () => { if (!confirm('반납도서 칸에 책을 넣으셨나요?')) return; try { await api('returnBook', b.dataset.ret, state.empNo); toast('반납 등록했습니다. 담당자 확인 후 반납 완료됩니다.'); state.cat = null; renderMe(); } catch (e) { toast(e.message, true); } });
+    $$('[data-rv]').forEach((b) => b.onclick = () => {
+      const m = modal(`<h2 style="font-size:18px;margin-bottom:4px">한 줄 후기</h2><p class="small muted" style="margin:0 0 12px">「${esc(b.dataset.rt)}」 · 이름 없이 날짜만 보여요. 다음에 읽을 동료에게 도움이 돼요.</p><textarea class="in" id="rvText" rows="3" maxlength="100" placeholder="예) 첫 팀장 3개월 차에 읽었는데, 1:1 면담 준비에 바로 써먹었어요">${esc(myRv[b.dataset.rv] || '')}</textarea><div class="row" style="margin-top:10px"><span class="small muted" id="rvCnt"></span><span class="spacer"></span><button class="btn primary" id="rvSave">남기기</button></div>`, 'narrow');
+      const t = $('#rvText', m), cnt = () => { $('#rvCnt', m).textContent = `${t.value.length}/100`; }; cnt(); t.oninput = cnt;
+      $('#rvSave', m).onclick = async () => { try { await api('review', b.dataset.rv, state.empNo, t.value); closeModal(); toast('후기를 남겼어요. 고마워요!'); renderMe(); } catch (e) { toast(e.message, true); } };
+    });
     $$('[data-pick]').forEach((b) => b.onclick = async () => { try { await api('pickup', [b.dataset.pick], state.empNo); toast('수령 완료로 기록했어요. 즐거운 독서 되세요.'); renderMe(); } catch (e) { toast(e.message, true); } });
     $$('[data-ext]').forEach((b) => b.onclick = async () => { try { const r = await api('extend', b.dataset.ext, state.empNo); toast(r.autoApproved ? `연장되었습니다. 새 반납예정일 ${pretty(r.dueDate)}` : '연장 신청했습니다. 담당자 승인 후 메일로 알려드립니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
     $$('[data-cancel]').forEach((b) => b.onclick = async () => { try { await api('cancelReservation', b.dataset.cancel, state.empNo); toast('예약을 취소했습니다.'); renderMe(); } catch (e) { toast(e.message, true); } });
@@ -1127,6 +1136,13 @@ h1, h2, h3, .brand b, .toolbar h2, .meta .t, .detail h2, .gen .gt, .stat b, .big
         <div class="panel"><h2>많이 읽은 책</h2>${d.popular.map((p, i) => `<div class="row" style="padding:5px 0;border-top:${i ? '1px solid var(--line)' : '0'}"><span>${esc(p.title)}</span><span class="spacer"></span><span class="muted small">${p.count}회</span></div>`).join('')}</div></div>
       ${d.reservations.length ? `<div class="panel" style="margin-top:16px"><h2>예약 대기 ${d.reservations.length}</h2><div class="tw"><table class="t"><tr><th>도서</th><th>예약자</th><th>예약일</th><th></th></tr>${d.reservations.map((r) => `<tr><td>${esc(r.title)}</td><td>${esc(r.name)} <span class="small muted">${esc(r.team)}</span></td><td>${short(r.createdAt)}</td><td style="text-align:right"><button class="btn sm danger" data-rcancel="${r.id}">취소</button></td></tr>`).join('')}</table></div></div>` : ''}`;
     bindLoanActions(pane, () => aDashboard(pane));
+    try {
+      const rv = await api('reviews');
+      if (rv.length) {
+        pane.insertAdjacentHTML('beforeend', `<div class="panel" style="margin-top:16px"><h2>최근 한 줄 후기 ${rv.length}</h2><p class="small muted" style="margin-top:-6px">책 상세 화면에 이름 없이 보입니다. 부적절한 후기는 숨길 수 있어요.</p>${rv.map((r) => `<div class="row" style="padding:7px 0;border-top:1px solid var(--line)"><div style="flex:1"><b>${esc(r.title)}</b> <span class="small muted">${short(r.at)}</span><div class="small" style="${r.hidden ? 'text-decoration:line-through;color:var(--muted)' : ''}">${esc(r.text)}</div></div><button class="btn sm ghost" data-hide="${esc(r.id)}" data-h="${r.hidden ? 0 : 1}">${r.hidden ? '다시 보이기' : '숨기기'}</button></div>`).join('')}</div>`);
+        $$('[data-hide]', pane).forEach((x) => x.onclick = async () => { await api('hideReview', x.dataset.hide, x.dataset.h === '1'); aDashboard(pane); });
+      }
+    } catch (e) {}
     if ($('#retAll', pane)) $('#retAll', pane).onclick = async () => { await api('confirmReturn', d.returning.map((l) => l.id)); toast(`${d.returning.length}건 반납 처리했습니다.`); state.cat = null; aDashboard(pane); };
     $$('[data-rcancel]', pane).forEach((b) => b.onclick = async () => { if (!confirm('예약을 취소할까요?')) return; await api('cancelReservation', b.dataset.rcancel); aDashboard(pane); });
   }

@@ -172,6 +172,8 @@ var TABLES = {
     ['id', 'ID'], ['title', '투표명'], ['startDate', '시작일'], ['endDate', '마감일'], ['maxVotes', '1인투표수'], ['buyCount', '구매권수'],
     ['candidates', '후보'], ['status', '상태'], ['createdAt', '생성일시'], ['createdBy', '생성자'], ['result', '결과']] },
   ballots: { sheet: '투표기록', cols: [['roundId', '투표ID'], ['empNo', '사번'], ['choices', '선택'], ['at', '일시']] },
+  // 한 줄 후기 (화면에는 이름 없이 날짜만)
+  reviews: { sheet: '한줄후기', cols: [['id', 'ID'], ['key', '책키'], ['title', '도서명'], ['empNo', '사번'], ['text', '후기'], ['createdAt', '작성일시'], ['status', '상태']] },
 };
 var JSON_FIELDS = { extensions: 1, extensionRequest: 1, candidates: 1, choices: 1, result: 1 };
 var STATUS_KO = { active: '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실', discarded: '폐기', waiting: '대기', fulfilled: '대출완료' };
@@ -965,7 +967,7 @@ function titleDetail_(key) {
     copies: copies, available: copies.filter(function (c) { return c.status === '대출가능'; }).length,
     waiting: rows_('reservations').filter(function (r) { return r.key === key && r.status === 'waiting'; }).length,
     loanCount: books.reduce(function (s, b) { return s + (Number(b.loanCount) || 0); }, 0), links: links_(pick('isbn'), first.title),
-    together: alsoBorrowed_(key),
+    together: alsoBorrowed_(key), reviews: reviewsOf_(key),
   };
 }
 
@@ -1056,7 +1058,8 @@ function myPage_(empNo) {
     if (l.extensionRequest && l.extensionRequest.status === 'pending') alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 연장 신청이 담당자 승인 대기 중입니다.' });
   });
   myRes.forEach(function (r) { if (r.availableNow) alerts.push({ level: 'success', text: '예약하신 「' + r.title + '」을(를) 지금 대출 신청할 수 있습니다.', key: r.key }); });
-  return { me: { empNo: who.empNo, name: who.name, team: who.team, emailMasked: maskEmail_(who.email) }, active: active, history: loans.filter(function (l) { return OPEN.indexOf(l.status) < 0; }).slice(0, 30), reservations: myRes, alerts: alerts };
+  var mr = {}; try { mr = myReviews_(empNo); } catch (e) {}
+  return { myReviews: mr, me: { empNo: who.empNo, name: who.name, team: who.team, emailMasked: maskEmail_(who.email) }, active: active, history: loans.filter(function (l) { return OPEN.indexOf(l.status) < 0; }).slice(0, 30), reservations: myRes, alerts: alerts };
 }
 
 function ownLoan_(loanId, empNo) {
@@ -1392,6 +1395,32 @@ function exportData_(kind) {
   }
   throw new AppError('알 수 없는 내보내기 종류입니다.');
 }
+
+
+// ─── 한 줄 후기: 그 책을 실제로 빌린 사람만, 책마다 1개(다시 쓰면 고침) ──
+function reviewsOf_(key) {
+  try { return rows_('reviews').filter(function (r) { return r.key === key && r.status !== 'hidden'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; }).slice(0, 20).map(function (r) { return { text: r.text, at: String(r.createdAt).slice(0, 10) }; }); } catch (e) { return []; }
+}
+function writeReview_(key, empNo, text) {
+  var who = employee_(empNo);
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  if (text.length < 2) throw new AppError('후기를 두 글자 이상 적어 주세요.');
+  var read = rows_('loans').some(function (l) { return normEmp_(l.empNo) === who.empNo && l.titleKey === key && ['active', 'returning', 'returned'].indexOf(l.status) >= 0; });
+  if (!read) throw new AppError('빌려 읽은 책에만 후기를 남길 수 있어요.');
+  var old = rows_('reviews').filter(function (r) { return r.key === key && normEmp_(r.empNo) === who.empNo; })[0];
+  var t = catalog_().items.filter(function (x) { return x.key === key; })[0];
+  var r = old || { id: uid_(), key: key, title: t ? t.title : '', empNo: who.empNo, status: 'shown' };
+  r.text = text; r.createdAt = nowIso_(); if (r.status === 'hidden') r.status = 'shown';
+  save_('reviews', r);
+  return { text: r.text, at: String(r.createdAt).slice(0, 10) };
+}
+function myReviews_(empNo) {
+  var who = employee_(empNo), m = {};
+  rows_('reviews').forEach(function (r) { if (normEmp_(r.empNo) === who.empNo && r.status !== 'hidden') m[r.key] = r.text; });
+  return m;
+}
+function adminReviews_() { return rows_('reviews').sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; }).slice(0, 50).map(function (r) { return { id: r.id, title: r.title, text: r.text, at: String(r.createdAt).slice(0, 10), hidden: r.status === 'hidden' }; }); }
+function hideReview_(id, hide) { var r = rows_('reviews').filter(function (x) { return x.id === id; })[0]; if (!r) throw new AppError('후기를 찾을 수 없습니다.'); r.status = hide ? 'hidden' : 'shown'; save_('reviews', r); return { ok: true }; }
 
 // ===== Mail.gs =====
 // 메일: 즉시 안내(신청·연장·예약) + 매일 자동 리마인더(반납예정·연체) + 주간 관리자 요약
@@ -2325,6 +2354,7 @@ var PUBLIC_API = {
   returnBook: function (loanId, empNo) { return withLock_(function () { return requestReturn_(loanId, empNo); }); },
   pickup: function (ids, empNo) { return withLock_(function () { return confirmPickup_(ids, empNo); }); },
   returnBooks: function (ids, empNo) { return withLock_(function () { return [].concat(ids).map(function (id) { return requestReturn_(id, empNo); }).length; }); },
+  review: function (key, empNo, text) { return withLock_(function () { return writeReview_(key, empNo, text); }); },
   extend: function (loanId, empNo) { return withLock_(function () { return requestExtend_(loanId, empNo); }); },
   reserve: function (key, empNo) { return withLock_(function () { return reserve_(key, empNo); }); },
   cancelReservation: function (id, empNo) { return withLock_(function () { return cancelReservation_(id, empNo, false); }); },
@@ -2355,6 +2385,8 @@ var ADMIN_API = {
   loans: function (status, q) { return adminLoans_(status, q); },
   createLoan: function (code, empNo, date) { return withLock_(function () { return adminCreateLoan_(code, empNo, date); }); },
   confirmReturn: function (ids) { return withLock_(function () { return confirmReturn_(ids, CURRENT_ADMIN); }); },
+  reviews: function () { return adminReviews_(); },
+  hideReview: function (id, hide) { return withLock_(function () { return hideReview_(id, hide); }); },
   markPickup: function (ids) { return withLock_(function () { return adminPickup_(ids); }); },
   extendLoan: function (id, approve) { return withLock_(function () { return adminExtend_(id, approve); }); },
   setLoanStatus: function (id, status) { return withLock_(function () { return setLoanStatus_(id, status); }); },

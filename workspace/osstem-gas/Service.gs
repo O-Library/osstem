@@ -121,7 +121,7 @@ function titleDetail_(key) {
     copies: copies, available: copies.filter(function (c) { return c.status === '대출가능'; }).length,
     waiting: rows_('reservations').filter(function (r) { return r.key === key && r.status === 'waiting'; }).length,
     loanCount: books.reduce(function (s, b) { return s + (Number(b.loanCount) || 0); }, 0), links: links_(pick('isbn'), first.title),
-    together: alsoBorrowed_(key),
+    together: alsoBorrowed_(key), reviews: reviewsOf_(key),
   };
 }
 
@@ -212,7 +212,8 @@ function myPage_(empNo) {
     if (l.extensionRequest && l.extensionRequest.status === 'pending') alerts.push({ level: 'info', text: '「' + l.bookTitle + '」 연장 신청이 담당자 승인 대기 중입니다.' });
   });
   myRes.forEach(function (r) { if (r.availableNow) alerts.push({ level: 'success', text: '예약하신 「' + r.title + '」을(를) 지금 대출 신청할 수 있습니다.', key: r.key }); });
-  return { me: { empNo: who.empNo, name: who.name, team: who.team, emailMasked: maskEmail_(who.email) }, active: active, history: loans.filter(function (l) { return OPEN.indexOf(l.status) < 0; }).slice(0, 30), reservations: myRes, alerts: alerts };
+  var mr = {}; try { mr = myReviews_(empNo); } catch (e) {}
+  return { myReviews: mr, me: { empNo: who.empNo, name: who.name, team: who.team, emailMasked: maskEmail_(who.email) }, active: active, history: loans.filter(function (l) { return OPEN.indexOf(l.status) < 0; }).slice(0, 30), reservations: myRes, alerts: alerts };
 }
 
 function ownLoan_(loanId, empNo) {
@@ -548,3 +549,29 @@ function exportData_(kind) {
   }
   throw new AppError('알 수 없는 내보내기 종류입니다.');
 }
+
+
+// ─── 한 줄 후기: 그 책을 실제로 빌린 사람만, 책마다 1개(다시 쓰면 고침) ──
+function reviewsOf_(key) {
+  try { return rows_('reviews').filter(function (r) { return r.key === key && r.status !== 'hidden'; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; }).slice(0, 20).map(function (r) { return { text: r.text, at: String(r.createdAt).slice(0, 10) }; }); } catch (e) { return []; }
+}
+function writeReview_(key, empNo, text) {
+  var who = employee_(empNo);
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+  if (text.length < 2) throw new AppError('후기를 두 글자 이상 적어 주세요.');
+  var read = rows_('loans').some(function (l) { return normEmp_(l.empNo) === who.empNo && l.titleKey === key && ['active', 'returning', 'returned'].indexOf(l.status) >= 0; });
+  if (!read) throw new AppError('빌려 읽은 책에만 후기를 남길 수 있어요.');
+  var old = rows_('reviews').filter(function (r) { return r.key === key && normEmp_(r.empNo) === who.empNo; })[0];
+  var t = catalog_().items.filter(function (x) { return x.key === key; })[0];
+  var r = old || { id: uid_(), key: key, title: t ? t.title : '', empNo: who.empNo, status: 'shown' };
+  r.text = text; r.createdAt = nowIso_(); if (r.status === 'hidden') r.status = 'shown';
+  save_('reviews', r);
+  return { text: r.text, at: String(r.createdAt).slice(0, 10) };
+}
+function myReviews_(empNo) {
+  var who = employee_(empNo), m = {};
+  rows_('reviews').forEach(function (r) { if (normEmp_(r.empNo) === who.empNo && r.status !== 'hidden') m[r.key] = r.text; });
+  return m;
+}
+function adminReviews_() { return rows_('reviews').sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; }).slice(0, 50).map(function (r) { return { id: r.id, title: r.title, text: r.text, at: String(r.createdAt).slice(0, 10), hidden: r.status === 'hidden' }; }); }
+function hideReview_(id, hide) { var r = rows_('reviews').filter(function (x) { return x.id === id; })[0]; if (!r) throw new AppError('후기를 찾을 수 없습니다.'); r.status = hide ? 'hidden' : 'shown'; save_('reviews', r); return { ok: true }; }

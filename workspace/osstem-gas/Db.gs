@@ -29,6 +29,8 @@ var TABLES = {
     ['id', 'ID'], ['title', '투표명'], ['startDate', '시작일'], ['endDate', '마감일'], ['maxVotes', '1인투표수'], ['buyCount', '구매권수'],
     ['candidates', '후보'], ['status', '상태'], ['createdAt', '생성일시'], ['createdBy', '생성자'], ['result', '결과']] },
   ballots: { sheet: '투표기록', cols: [['roundId', '투표ID'], ['empNo', '사번'], ['choices', '선택'], ['at', '일시']] },
+  // 한 줄 후기 (화면에는 이름 없이 날짜만)
+  reviews: { sheet: '한줄후기', cols: [['id', 'ID'], ['key', '책키'], ['title', '도서명'], ['empNo', '사번'], ['text', '후기'], ['createdAt', '작성일시'], ['status', '상태']] },
 };
 var JSON_FIELDS = { extensions: 1, extensionRequest: 1, candidates: 1, choices: 1, result: 1 };
 var STATUS_KO = { active: '대출중', returning: '반납확인중', returned: '반납완료', cancelled: '취소', lost: '분실', discarded: '폐기', waiting: '대기', fulfilled: '대출완료' };
